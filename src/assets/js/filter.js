@@ -30,22 +30,22 @@ export const identityOption = [
 ]
 
 export const dutyDayOption = [
-  { label: '0：未安排', value: '0' },
-  { label: '1：周一', value: '1' },
-  { label: '2：周二', value: '2' },
-  { label: '3：周三', value: '3' },
-  { label: '4：周四', value: '4' },
-  { label: '5：周五', value: '5' },
-  { label: '6：周六', value: '6' },
-  { label: '7：周日', value: '7' }
+  { label: '未安排', value: '0' },
+  { label: '周一', value: '1' },
+  { label: '周二', value: '2' },
+  { label: '周三', value: '3' },
+  { label: '周四', value: '4' },
+  { label: '周五', value: '5' },
+  { label: '周六', value: '6' },
+  { label: '周日', value: '7' }
 ]
 export const dutyFrameOption = [
-  { label: '0：未安排', value: '0' },
-  { label: '1：12节', value: '1' },
-  { label: '2：34节', value: '2' },
-  { label: '3：56节', value: '3' },
-  { label: '4：78节', value: '4' },
-  { label: '5：910节', value: '5' }
+  { label: '未安排', value: '0' },
+  { label: '第1-2节', value: '1' },
+  { label: '第3-4节', value: '2' },
+  { label: '第5-6节', value: '3' },
+  { label: '第7-8节', value: '4' },
+  { label: '第9-10节', value: '5' }
 ]
 
 // export const departmentFilter = [
@@ -71,7 +71,7 @@ export const departmentFilter = [
   { text: '闪客部', value: '闪客部' },
   { text: '摄影部', value: '摄影部' },
   { text: '管理组', value: '管理组' }
-]
+]``
 
 export const stateFilter = [
   { text: '正在值班', value: '正在值班' },
