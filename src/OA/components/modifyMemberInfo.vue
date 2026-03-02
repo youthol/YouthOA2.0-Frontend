@@ -101,7 +101,7 @@ onMounted(() => {
         label-position="top"
         label-width="100px"
         :model="memberInfo"
-        style="max-width: 460px"
+        style="max-width: 100%; padding: 0 20px"
       >
         <el-form-item prop="memberInfo.name" label="姓名">
           <el-input v-model="memberInfo.name" />
@@ -127,58 +127,69 @@ onMounted(() => {
           </el-select>
         </el-form-item>
         <el-form-item prop="memberInfo.duty[0].day" label="值班1">
-          <el-select v-model="memberInfo.duty[0].day" class="m-2 duty-select" placeholder="Select">
-            <el-option
-              v-for="item in dutyDayOption"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-          <el-select
-            v-model="memberInfo.duty[0].frame"
-            class="m-2 duty-select"
-            placeholder="Select"
-          >
-            <el-option
-              v-for="item in dutyFrameOption"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+          <div class="duty-row">
+            <el-select v-model="memberInfo.duty[0].day" class="duty-select" placeholder="Select">
+              <el-option
+                v-for="item in dutyDayOption"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+            <el-select
+              v-model="memberInfo.duty[0].frame"
+              class="duty-select"
+              placeholder="Select"
+            >
+              <el-option
+                v-for="item in dutyFrameOption"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
         </el-form-item>
         <el-form-item prop="memberInfo.duty[1].day" label="值班2">
-          <el-select v-model="memberInfo.duty[1].day" class="m-2 duty-select" placeholder="Select">
-            <el-option
-              v-for="item in dutyDayOption"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-          <el-select
-            v-model="memberInfo.duty[1].frame"
-            class="m-2 duty-select"
-            placeholder="Select"
-          >
-            <el-option
-              v-for="item in dutyFrameOption"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
+          <div class="duty-row">
+            <el-select v-model="memberInfo.duty[1].day" class="duty-select" placeholder="Select">
+              <el-option
+                v-for="item in dutyDayOption"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+            <el-select
+              v-model="memberInfo.duty[1].frame"
+              class="duty-select"
+              placeholder="Select"
+            >
+              <el-option
+                v-for="item in dutyFrameOption"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </div>
         </el-form-item>
         <el-button type="primary" plain @click="modifyMemberInfo">确认修改</el-button>
         <el-button type="danger" plain @click="handleDelete">删除成员</el-button>
+        
       </el-form>
     </template>
   </el-drawer>
 </template>
 
 <style scoped>
+.duty-row {
+  display: flex;
+  gap: 10px;
+}
+
 .duty-select {
-  margin: 0 3px;
+  flex: 1;
+  min-width: 120px;
 }
 </style>

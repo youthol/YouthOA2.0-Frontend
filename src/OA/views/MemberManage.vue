@@ -3,6 +3,7 @@ import { http } from 'assets/js/http'
 // import { useUserStore } from 'store/store'
 import { ref, reactive, onMounted } from 'vue'
 import { errorAlert } from 'assets/js/message.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import modifyMemberInfo from '../components/modifyMemberInfo.vue'
 import addNewYoutholer from '../components/addNewYoutholer.vue'
 import { departmentFilter } from 'assets/js/filter.js'
@@ -53,19 +54,19 @@ const formatter = (data) => {
     }
     switch (duty_list[i].frame) {
       case 1:
-        res += '12节'
+        res += '第1-2节'
         break
       case 2:
-        res += '34节'
+        res += '第3-4节'
         break
       case 3:
-        res += '56节'
+        res += '第5-6节'
         break
       case 4:
-        res += '78节'
+        res += '第7-8节'
         break
       case 5:
-        res += '910节'
+        res += '第9-10节'
     }
   }
   return res
@@ -143,6 +144,43 @@ function displayMemberAdd(res) {
 function addOneYouthol() {
   displayMemberAdd(true)
 }
+
+const resetPassword = (row) => {
+  ElMessageBox.confirm(
+    `确认要重置 ${row.name}（${row.sdut_id}）的密码吗？`,
+    '重置密码',
+    {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  )
+    .then(() => {
+      http
+        .get('/initPassword/', {
+          params: {
+            username: row.sdut_id
+          }
+        })
+        .then((res) => {
+          ElMessage({
+            type: 'success',
+            message: '密码已经被重置为youthol'
+          })
+        })
+        .catch((error) => {
+          console.log(error)
+          errorAlert('重置密码失败')
+        })
+    })
+    .catch(() => {
+      ElMessage({
+        type: 'info',
+        message: '已取消重置'
+      })
+    })
+}
+
 onMounted(() => {
   getAllYoutholer()
 })
@@ -203,6 +241,7 @@ onMounted(() => {
       <el-table-column align="center" prop="option" label="操作">
         <template #default="scope">
           <el-button @click="editMember(scope.$index, scope.row)">编辑</el-button>
+          <el-button type="warning" plain @click="resetPassword(scope.row)">重置密码</el-button>
           <!-- <el-button type="danger" @click="handleDelete(scope.$index, scope.row)">Delete</el-button> -->
         </template>
       </el-table-column>
