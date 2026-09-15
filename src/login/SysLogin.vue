@@ -12,19 +12,16 @@ import changePassword from './components/changePassword.vue'
 
 let box_state = ref(true)
 
-const verifySignIn = new Promise((resolve, reject) => {
-  http
+function verifySignIn() {
+  if (!localStorage.getItem('YoutholAccessToken')) {
+    return Promise.resolve(false)
+  }
+
+  return http
     .post('/GetUserInfo/', {})
-    .then((res) => {
-      // 在这里设置 Pinia状态？
-      console.log(res)
-      resolve()
-    })
-    .catch(function (error) {
-      console.log(error)
-      reject()
-    })
-})
+    .then(() => true)
+    .catch(() => false)
+}
 
 function switchBox(res) {
   box_state.value = res
@@ -32,12 +29,10 @@ function switchBox(res) {
 }
 
 // 生命周期
-onMounted(() => {
-  verifySignIn
-    .then(() => {
-      window.location.href = '/youthol/'
-    })
-    .catch(() => {})
+onMounted(async () => {
+  if (await verifySignIn()) {
+    window.location.href = import.meta.env.BASE_URL
+  }
 })
 </script>
 

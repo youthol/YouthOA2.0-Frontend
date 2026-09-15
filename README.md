@@ -1,6 +1,6 @@
 # SDUT Database Systems Project Front End
 
-axios 的配置信息被放置在了 `src/assets/js/http.js` 文件中，请根据自己的项目需要进行配置，以下是一个简要模板：
+axios 的配置信息位于 `src/assets/js/http.js`。默认使用同源的 `/youthol` 后端路径；需要接入其他后端时，设置构建环境变量 `VITE_API_BASE_URL`。
 ```js
 import axios from 'axios'
 
@@ -24,6 +24,5 @@ if (accessToken === null || accessToken === undefined || accessToken === '') {
 ```
 
 ## Overview
-
 
 

@@ -56,7 +56,7 @@ function postChangePwd() {
         is_changed = true
         successAlert('修改成功')
         //跳转到首页
-        window.location.href = '/youthol/'
+        window.location.href = import.meta.env.BASE_URL
       } else if (data.message == '原密码错误') {
         errorAlert('原密码错误')
       } else {

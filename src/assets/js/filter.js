@@ -71,7 +71,7 @@ export const departmentFilter = [
   { text: '闪客部', value: '闪客部' },
   { text: '摄影部', value: '摄影部' },
   { text: '管理组', value: '管理组' }
-]``
+]
 
 export const stateFilter = [
   { text: '正在值班', value: '正在值班' },
