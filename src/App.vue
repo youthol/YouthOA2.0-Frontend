@@ -6,23 +6,30 @@ import YoutholTitle from './components/YoutholTitle.vue'
 import { http } from './assets/js/http.js' //配置了基本的设置
 
 function toLogin() {
-  window.location.href = '/youthol/login/'
+  window.location.href = `${import.meta.env.BASE_URL}login/`
 }
 
 function toOA() {
-  window.location.href = '/youthol/OA/'
+  window.location.href = `${import.meta.env.BASE_URL}OA/`
 }
 
 let store = useUserStore()
 
 function verifySignIn() {
+  const accessToken = localStorage.getItem('YoutholAccessToken')
+
+  if (!accessToken) {
+    store.$patch({ sdut_id: 'no id', is_login: false })
+    return
+  }
+
   http
     .post(
       '/GetUserInfo/',
       {},
       {
         headers: {
-          Authorization: 'Bearer ' + localStorage.getItem('YoutholAccessToken')
+          Authorization: 'Bearer ' + accessToken
         }
       }
     )

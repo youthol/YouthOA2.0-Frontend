@@ -82,7 +82,7 @@ onMounted(() => {
       checkDuty()
     })
     .catch(() => {
-      window.location.href = '/youthol/'
+      window.location.href = import.meta.env.BASE_URL
     })
 })
 </script>

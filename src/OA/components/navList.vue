@@ -6,7 +6,7 @@ let userStore = useUserStore()
 function Logout() {
   localStorage.removeItem('YoutholAccessToken')
   userStore.$patch({ sdut_id: '', is_login: false })
-  window.location.href = '/youthol/'
+  window.location.href = import.meta.env.BASE_URL
 }
 
 function close() {

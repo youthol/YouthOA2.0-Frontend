@@ -31,9 +31,6 @@ const rules = reactive({
 })
 
 function signIn() {
-  console.log(formData.value.username)
-  console.log(formData.value.password)
-
   if (formData.value.username == '') {
     errorAlert('请输入账号')
     return
@@ -60,15 +57,15 @@ function signIn() {
         //存储 token
         localStorage.setItem('YoutholAccessToken', token)
         //跳转到首页
-        window.location.href = '/youthol/'
+        window.location.href = import.meta.env.BASE_URL
       } else if (data.SignState == '账号或密码错误') {
         errorAlert('账号或密码错误')
       } else {
         errorAlert('未知错误')
       }
     })
-    .catch(function (error) {
-      console.log(error)
+    .catch(function () {
+      errorAlert('登录请求失败，请稍后重试')
     })
 }
 </script>
