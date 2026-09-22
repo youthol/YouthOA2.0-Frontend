@@ -5,6 +5,7 @@ import { http } from 'assets/js/http.js' //配置了基本的设置
 import { less768 } from 'assets/js/screen.js' //配置了基本的设置
 import { useUserStore } from 'store/store.js'
 import { errorAlert } from 'assets/js/message.js'
+import { bindCurrentUser, getDutyPauseState } from 'assets/js/oaApi.js'
 
 import navList from './components/navList.vue'
 
@@ -25,6 +26,7 @@ const verifySignIn = new Promise((resolve, reject) => {
         identity: res.data.identity,
         position: res.data.position
       })
+      bindCurrentUser(res.data)
       // store.$patch({ sdut_id: res.data.sdut_id })
       console.log('已登录')
       resolve()
@@ -35,6 +37,15 @@ const verifySignIn = new Promise((resolve, reject) => {
       reject()
     })
 })
+
+
+function loadPauseState() {
+  getDutyPauseState()
+    .then((res) => {
+      userStore.$patch({ duty_paused: !!res.data.paused })
+    })
+    .catch(() => {})
+}
 
 function checkDuty() {
   http
@@ -74,11 +85,13 @@ onMounted(() => {
   }
   if (userStore.is_login == true) {
     //先检查 pinia
+    loadPauseState()
     checkDuty()
     return
   }
   verifySignIn
     .then(() => {
+      loadPauseState()
       checkDuty()
     })
     .catch(() => {

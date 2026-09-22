@@ -1,5 +1,9 @@
 <script setup>
 import { http } from 'assets/js/http'
+import { getDutyStatusInRange, useMock } from 'assets/js/oaApi.js'
+import { combineDateTime } from 'assets/js/datetime.js'
+import { formatScheduleLine } from 'assets/js/dutyFrame.js'
+import dutyStatusDots from '../components/dutyStatusDots.vue'
 import { less768 } from 'assets/js/screen'
 import { ref, reactive, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
@@ -14,6 +18,38 @@ let loading = ref(false)
 const filterHandler = (value, row, column) => {
   const property = column['property']
   return row[property] === value
+}
+
+function fillLegacy(data) {
+  tableData.length = 0
+  for (let i = 0; i < data.length; i++) {
+    tableData.push({
+      sdut_id: data[i].sdut_id,
+      unique_id: data[i].sdut_id + data[i].department,
+      name: data[i].name,
+      department: data[i].department,
+      identity: data[i].identity,
+      total_time: (data[i].total_time / 3600).toFixed(2),
+      absence: data[i].absence,
+      leave: data[i].leave,
+      date: '',
+      start_time: '',
+      status: data[i].absence ? 'absent' : 'normal',
+      flags: [],
+      legacy: true
+    })
+  }
+}
+
+function fillSlots(data) {
+  tableData.length = 0
+  for (let i = 0; i < data.length; i++) {
+    tableData.push({
+      ...data[i],
+      unique_id: data[i].id || data[i].sdut_id + data[i].date + data[i].start_time,
+      legacy: false
+    })
+  }
 }
 
 function getDutyInfo() {
@@ -32,34 +68,37 @@ function getDutyInfo() {
   }
 
   loading.value = true
-  http
-    .post('/GetTotalDutyInRange/', {
-      start_time: dateRange.value[0],
-      end_time: dateRange.value[1]
-    })
+  getDutyStatusInRange({
+    start_time: dateRange.value[0],
+    end_time: dateRange.value[1]
+  })
     .then((res) => {
-      console.log(res)
-      let data = res.data
-      tableData.length = 0
-      for (let i = 0; i < data.length; i++) {
-        let item = {
-          sdut_id: data[i].sdut_id,
-          unique_id: data[i].sdut_id + data[i].department,
-          name: data[i].name,
-          department: data[i].department,
-          identity: data[i].identity,
-          total_time: (data[i].total_time / 3600).toFixed(2),
-          absence: data[i].absence,
-          leave: data[i].leave
-        }
-        tableData.push(item)
-      }
+      fillSlots(res.data || [])
       successAlert('共找到' + tableData.length + '条值班信息')
       loading.value = false
     })
     .catch(function (error) {
-      console.log(error)
-      errorAlert('获取值班信息失败')
+      if (useMock) {
+        console.log(error)
+        errorAlert('获取值班信息失败')
+        loading.value = false
+        return
+      }
+      http
+        .post('/GetTotalDutyInRange/', {
+          start_time: dateRange.value[0],
+          end_time: dateRange.value[1]
+        })
+        .then((res) => {
+          fillLegacy(res.data || [])
+          successAlert('共找到' + tableData.length + '条值班信息')
+          loading.value = false
+        })
+        .catch(function (legacyError) {
+          console.log(legacyError)
+          errorAlert('获取值班信息失败')
+          loading.value = false
+        })
     })
 }
 
@@ -150,11 +189,21 @@ const shortcuts = [
         :filter-method="filterHandler"
         sortable
       />
-
-      <el-table-column prop="total_time" label="累计时长（小时）" sortable />
-      <el-table-column prop="absence" label="缺勤" sortable />
-      <el-table-column prop="leave" label="请假" sortable />
-
+      <el-table-column label="值班时间">
+        <template #default="scope">
+          {{ scope.row.legacy ? ('累计 ' + scope.row.total_time + ' 小时') : formatScheduleLine(scope.row) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="完整时间">
+        <template #default="scope">
+          {{ scope.row.legacy ? '-' : combineDateTime(scope.row.date, scope.row.start_time) }}
+        </template>
+      </el-table-column>
+      <el-table-column label="状态">
+        <template #default="scope">
+          <dutyStatusDots :status="scope.row.status" :flags="scope.row.flags || []" :source="scope.row.source" show-label />
+        </template>
+      </el-table-column>
       <el-table-column
         prop="identity"
         label="类别"

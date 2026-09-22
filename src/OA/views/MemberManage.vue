@@ -1,20 +1,48 @@
 <script setup>
-import { http } from 'assets/js/http'
-// import { useUserStore } from 'store/store'
-import { ref, reactive, onMounted } from 'vue'
-import { errorAlert } from 'assets/js/message.js'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { errorAlert, successAlert } from 'assets/js/message.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import modifyMemberInfo from '../components/modifyMemberInfo.vue'
 import addNewYoutholer from '../components/addNewYoutholer.vue'
+import importOldMembers from '../components/importOldMembers.vue'
+import dutyScheduleTables from '../components/dutyScheduleTables.vue'
 import { departmentFilter } from 'assets/js/filter.js'
-
-// let userStore = useUserStore()
+import { formatDutyOption } from 'assets/js/dutyFrame.js'
+import {
+  getAllYoutholer as fetchAllYoutholer,
+  getSemesterCatalog,
+  setCurrentSemester,
+  setSemesterDutyRange,
+  initPassword
+} from 'assets/js/oaApi.js'
 
 let tableRef = ref()
 let tableData = reactive([])
 let modifyDrawer = ref(false)
 let addMemberDrawer = ref(false)
+let importDrawer = ref(false)
 let loading = ref(true)
+let savingSemester = ref(false)
+let switchingSemester = ref(false)
+const catalog = ref([])
+const currentSemesterId = ref('')
+let semester = reactive({
+  start_date: '',
+  end_date: ''
+})
+const currentSemester = computed(() => catalog.value.find((item) => item.id === currentSemesterId.value) || null)
+const datesDirty = computed(() => {
+  const item = currentSemester.value
+  if (!item || !semester.start_date || !semester.end_date) return false
+  return semester.start_date !== item.default_start || semester.end_date !== item.default_end
+})
+const semesterReady = computed(
+  () =>
+    !!currentSemesterId.value &&
+    !!semester.start_date &&
+    !!semester.end_date &&
+    semester.start_date <= semester.end_date
+)
 let editInfo = reactive({
   sdut_id: 0,
   name: '',
@@ -22,54 +50,12 @@ let editInfo = reactive({
   identity: '',
   duty: []
 })
-
 const formatter = (data) => {
-  let duty_list = data.duty
-  let res = ''
-  for (let i = 0; i < duty_list.length; i++) {
-    if (i == 0) res = '周'
-    else res += '，周'
-    switch (duty_list[i].day) {
-      case 1:
-        res += '一'
-        break
-      case 2:
-        res += '二'
-        break
-      case 3:
-        res += '三'
-        break
-      case 4:
-        res += '四'
-        break
-      case 5:
-        res += '五'
-        break
-      case 6:
-        res += '六'
-        break
-      case 7:
-        res += '日'
-        break
-    }
-    switch (duty_list[i].frame) {
-      case 1:
-        res += '第1-2节'
-        break
-      case 2:
-        res += '第3-4节'
-        break
-      case 3:
-        res += '第5-6节'
-        break
-      case 4:
-        res += '第7-8节'
-        break
-      case 5:
-        res += '第9-10节'
-    }
-  }
-  return res
+  let duty_list = data.duty || []
+  return duty_list
+    .map((item) => formatDutyOption(item))
+    .filter(Boolean)
+    .join('；')
 }
 const filterHandler = (value, row, column) => {
   const property = column['property']
@@ -77,7 +63,7 @@ const filterHandler = (value, row, column) => {
 }
 const filterDutyHandler = (value, row, column) => {
   const property = column['property']
-  let duty = row[property]
+  let duty = row[property] || []
   for (let i = 0; i < duty.length; i++) {
     if (duty[i].day == value) {
       return true
@@ -88,25 +74,21 @@ const filterDutyHandler = (value, row, column) => {
 
 function getAllYoutholer() {
   loading.value = true
-  http
-    .post('/GetAllYoutholer/', {})
+  fetchAllYoutholer()
     .then((res) => {
-      console.log(res.data)
-
-      let data = res.data
+      let data = res.data || []
       tableData.length = 0
       for (let i = 0; i < data.length; i++) {
-        let item = {
+        tableData.push({
           sdut_id: data[i].sdut_id,
           unique_id: data[i].sdut_id + data[i].department,
           name: data[i].name,
           department: data[i].department,
           identity: data[i].identity,
           duty: data[i].duty
-        }
-        tableData.push(item)
-        loading.value = false
+        })
       }
+      loading.value = false
     })
     .catch(function (error) {
       console.log(error)
@@ -115,21 +97,119 @@ function getAllYoutholer() {
     })
 }
 
+function applySemesterDates(item, useActual) {
+  if (!item) {
+    semester.start_date = ''
+    semester.end_date = ''
+    return
+  }
+  if (useActual && (item.semester_start || item.duty_end)) {
+    semester.start_date = item.semester_start || item.default_start || ''
+    semester.end_date = item.duty_end || item.default_end || ''
+    return
+  }
+  semester.start_date = item.default_start || ''
+  semester.end_date = item.default_end || ''
+}
+
+function patchCatalogItem(item) {
+  if (!item?.id) return
+  const index = catalog.value.findIndex((row) => row.id === item.id)
+  if (index >= 0) {
+    catalog.value[index] = { ...catalog.value[index], ...item }
+  }
+  catalog.value.forEach((row) => {
+    row.is_current = row.id === item.id
+  })
+}
+
+function loadSemester() {
+  getSemesterCatalog()
+    .then((res) => {
+      const list = res.data?.list || res.data || []
+      catalog.value = Array.isArray(list) ? list : []
+      const current = catalog.value.find((item) => item.is_current) || catalog.value[0] || null
+      currentSemesterId.value = current?.id || ''
+      applySemesterDates(current, true)
+    })
+    .catch((err) => {
+      errorAlert(err.message || '获取学期配置失败')
+    })
+}
+
+function onSemesterChange(id) {
+  if (!id) return
+  switchingSemester.value = true
+  setCurrentSemester({ semester_id: id })
+    .then((res) => {
+      switchingSemester.value = false
+      const item = res.data || catalog.value.find((row) => row.id === id)
+      patchCatalogItem(item)
+      applySemesterDates(catalog.value.find((row) => row.id === id), false)
+      ElMessage.info('可按实际情况修改')
+    })
+    .catch((err) => {
+      switchingSemester.value = false
+      const current = catalog.value.find((item) => item.is_current)
+      currentSemesterId.value = current?.id || ''
+      errorAlert(err.message || '切换学期失败')
+    })
+}
+
+function saveSemester() {
+  if (savingSemester.value) return
+  if (!currentSemesterId.value) {
+    errorAlert('请选择学年学期')
+    return
+  }
+  if (!semester.start_date || !semester.end_date) {
+    errorAlert('请选择学期开始日期和值班截止日')
+    return
+  }
+  if (semester.start_date > semester.end_date) {
+    errorAlert('截止日期不能早于开始日期')
+    return
+  }
+  savingSemester.value = true
+  setSemesterDutyRange({
+    semester_id: currentSemesterId.value,
+    start_date: semester.start_date,
+    end_date: semester.end_date
+  })
+    .then((res) => {
+      savingSemester.value = false
+      const item = { ...(res.data || {}) }
+      delete item.created
+      patchCatalogItem(item)
+      successAlert('学期值班区间已保存，将按新区间补齐班次，对全部值班成员生效')
+    })
+    .catch((err) => {
+      savingSemester.value = false
+      errorAlert(err.message || '保存失败')
+    })
+}
+
+function guardSemesterAction(action) {
+  if (!semesterReady.value) {
+    errorAlert('请先选择学年学期并保存有效日期')
+    return
+  }
+  action()
+}
+
 const editMember = (index, row) => {
   editInfo.sdut_id = row.sdut_id
   editInfo.department = row.department
   editInfo.name = row.name
   editInfo.identity = row.identity
   let duty_list = []
-  for (let i = 0; i < row.duty.length; i++) {
+  for (let i = 0; i < (row.duty || []).length; i++) {
     duty_list.push({ day: row.duty[i].day, frame: row.duty[i].frame })
   }
   while (duty_list.length < 2) {
     duty_list.push({ day: '0', frame: '0' })
   }
   editInfo.duty = duty_list
-  // console.log(row.duty)
-  console.log(editInfo)
   displayMemberEdit(true)
 }
 
@@ -146,23 +226,14 @@ function addOneYouthol() {
 }
 
 const resetPassword = (row) => {
-  ElMessageBox.confirm(
-    `确认要重置 ${row.name}（${row.sdut_id}）的密码吗？`,
-    '重置密码',
-    {
-      confirmButtonText: '确认',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }
-  )
+  ElMessageBox.confirm(`确认要重置 ${row.name}（${row.sdut_id}）的密码吗？`, '重置密码', {
+    confirmButtonText: '确认',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
     .then(() => {
-      http
-        .get('/initPassword/', {
-          params: {
-            username: row.sdut_id
-          }
-        })
-        .then((res) => {
+      initPassword(row.sdut_id)
+        .then(() => {
           ElMessage({
             type: 'success',
             message: '密码已经被重置为youthol'
@@ -182,15 +253,44 @@ const resetPassword = (row) => {
 }
 
 onMounted(() => {
+  loadSemester()
   getAllYoutholer()
 })
 </script>
 <template>
   <div class="main-layout">
     <div class="options">
-      <div class="add-btn" @click="addOneYouthol">新增成员</div>
-      <!-- <div class="add-btn" @click="addManyYouthol">批量导入</div> -->
+      <div class="semester-box">
+        <el-select
+          v-model="currentSemesterId"
+          placeholder="学年学期"
+          :loading="switchingSemester"
+          class="semester-select"
+          @change="onSemesterChange"
+        >
+          <el-option v-for="item in catalog" :key="item.id" :label="item.label" :value="item.id" />
+        </el-select>
+        <el-date-picker
+          v-model="semester.start_date"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="学期开始日期"
+        />
+        <el-date-picker
+          v-model="semester.end_date"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="值班截止日"
+        />
+        <span v-if="datesDirty" class="dirty-tag">已手改</span>
+        <div class="add-btn" :class="{ disabled: savingSemester || !semesterReady }" @click="saveSemester">保存学期</div>
+      </div>
+      <div class="action-box">
+        <div class="add-btn" :class="{ disabled: !semesterReady }" @click="guardSemesterAction(addOneYouthol)">添加新成员</div>
+        <div class="add-btn" :class="{ disabled: !semesterReady }" @click="guardSemesterAction(() => (importDrawer = true))">导入老成员</div>
+      </div>
     </div>
+    <p class="semester-hint">选中学年学期后会填入默认起止日，可按实际情况修改；保存后的实际日期对当前学期全体值班成员生效。</p>
 
     <el-table
       ref="tableRef"
@@ -238,14 +338,15 @@ onMounted(() => {
         ]"
         :filter-method="filterDutyHandler"
       />
-      <el-table-column align="center" prop="option" label="操作">
+      <el-table-column align="center" prop="option" label="操作" width="220">
         <template #default="scope">
           <el-button @click="editMember(scope.$index, scope.row)">编辑</el-button>
           <el-button type="warning" plain @click="resetPassword(scope.row)">重置密码</el-button>
-          <!-- <el-button type="danger" @click="handleDelete(scope.$index, scope.row)">Delete</el-button> -->
         </template>
       </el-table-column>
     </el-table>
+
+    <dutyScheduleTables />
 
     <modifyMemberInfo
       @displayMemberEdit="displayMemberEdit"
@@ -260,6 +361,13 @@ onMounted(() => {
       :drawer="addMemberDrawer"
     >
     </addNewYoutholer>
+
+    <importOldMembers
+      :drawer="importDrawer"
+      @displayImport="(val) => (importDrawer = val)"
+      @imported="getAllYoutholer"
+    />
+
   </div>
 </template>
 
@@ -274,32 +382,73 @@ onMounted(() => {
 .table {
   width: 80%;
 }
+.semester-hint {
+  width: 80%;
+  margin: 0 0 12px;
+  color: #666;
+  font-size: 13px;
+}
 .options {
-  width: 100%;
+  width: 80%;
   display: flex;
-  /* flex-direction: column; */
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.semester-box,
+.action-box {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.semester-select {
+  width: 240px;
+}
+.dirty-tag {
+  font-size: 13px;
+  color: #d48806;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
 }
 
 .add-btn {
-  font-size: 20px;
-  margin: 10px 20px;
+  font-size: 18px;
+  margin: 10px 0;
   padding: 10px 20px;
   border-radius: 10px;
   font-weight: 700;
   color: #008aff;
   background-color: white;
   border: 3px #008aff solid;
+  cursor: pointer;
 }
 
 .add-btn:hover {
   color: white;
   background-color: #008aff;
 }
+.add-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.add-btn.disabled:hover {
+  color: #008aff;
+  background-color: white;
+}
 @media only screen and (max-width: 768px) {
-  .table {
+  .table,
+  .options,
+  .semester-hint {
     width: 90%;
+  }
+  .options {
+    flex-direction: column;
   }
 }
 </style>
