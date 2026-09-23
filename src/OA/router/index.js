@@ -1,4 +1,14 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { useUserStore } from 'store/store.js'
+
+const adminRoutes = [
+  '/DutyRecord',
+  '/MemberManage',
+  '/MachineManage',
+  '/RoomManage',
+  '/leave-record',
+  '/pause-duty'
+]
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -67,6 +77,27 @@ const router = createRouter({
       }
     },
     {
+      path: '/leave-adjust',
+      name: 'oa-leave-adjust',
+      components: {
+        MainComponment: () => import('../views/LeaveAdjust.vue')
+      }
+    },
+    {
+      path: '/leave-record',
+      name: 'oa-leave-record',
+      components: {
+        MainComponment: () => import('../views/LeaveRecord.vue')
+      }
+    },
+    {
+      path: '/pause-duty',
+      name: 'oa-pause-duty',
+      components: {
+        MainComponment: () => import('../views/PauseDuty.vue')
+      }
+    },
+    {
       path: '/test',
       name: 'oa-test',
       components: {
@@ -77,8 +108,10 @@ const router = createRouter({
 })
 
 // 路由守卫
-// router.beforeEach((to, from, next) => {
-//   const isAuthenticated = true // 替换为你的身份验证逻辑
+router.beforeEach((to) => {
+  if (!adminRoutes.includes(to.path)) return true
+  return useUserStore().identity === '管理员'
+})
 
 //   if (to.matched.some((record) => record.meta.requiresAuth) && !isAuthenticated) {
 //     // 如果需要身份验证且用户未登录，则重定向到登录页

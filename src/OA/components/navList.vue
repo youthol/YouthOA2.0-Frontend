@@ -23,19 +23,7 @@ function close() {
       <div class="duty nav-item" @click="close">值班</div>
     </router-link>
 
-    <!-- <router-link to="/borrow">
-      <div class="borrow nav-item" @click="close">设备</div>
-    </router-link> -->
-
-    <!-- <router-link to="/study">
-      <div class="study nav-item" @click="close">培训</div>
-    </router-link> -->
-
-    <!-- <router-link to="/test">
-      <div class="test nav-item" @click="close">房间</div>
-    </router-link> -->
-
-    <router-link to="/room" v-if="userStore.position == '负责人' || userStore.identity == '管理员'">
+    <router-link to="/room" v-if="userStore.identity == '管理员'">
       <div class="room nav-item" @click="close">房间借用</div>
     </router-link>
 
@@ -50,10 +38,18 @@ function close() {
     <router-link to="/MemberManage" v-if="userStore.identity == '管理员'">
       <div class="MemberManage nav-item" @click="close">成员管理</div>
     </router-link>
-    <!-- 
-    <router-link to="/MachineManage" v-if="userStore.identity == '管理员'">
-      <div class="MachineManage nav-item" @click="close">设备管理</div>
-    </router-link> -->
+
+    <router-link to="/leave-adjust">
+      <div class="leave-adjust nav-item" @click="close">请假调班</div>
+    </router-link>
+
+    <router-link to="/leave-record" v-if="userStore.identity == '管理员'">
+      <div class="leave-record nav-item" @click="close">请假记录</div>
+    </router-link>
+
+    <router-link to="/pause-duty" v-if="userStore.identity == '管理员'">
+      <div class="pause-duty nav-item" @click="close">暂停值班</div>
+    </router-link>
 
     <div class="logout nav-item" @click="Logout">退出登录</div>
   </el-scrollbar>

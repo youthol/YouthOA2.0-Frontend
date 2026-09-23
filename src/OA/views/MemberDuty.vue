@@ -5,10 +5,11 @@ import { ElMessage } from 'element-plus'
 
 import exhibitDutyInfo from '../components/exhibitDutyInfo.vue'
 import applyDutyLeave from '../components/applyDutyLeave.vue'
-import exhibitMyDutyRecord from '../components/exhibitMyDutyRecord.vue'
+import exhibitDutyCalendar from '../components/exhibitDutyCalendar.vue'
 
 import { http } from 'assets/js/http'
 import { useUserStore } from 'store/store'
+import { getDutyPauseState } from 'assets/js/oaApi.js'
 
 let is_duty = ref(false)
 let userStore = useUserStore()
@@ -58,6 +59,10 @@ function getLocation() {
 }
 
 function startDuty() {
+  if (userStore.duty_paused) {
+    errorAlert('当前处于暂停值班状态，无法签到')
+    return
+  }
   ElMessage('正在签到，请稍后')
 
   if (waiting_duty) return
@@ -278,11 +283,6 @@ function displayApplyDuty(res) {
   applyDutyDrawer.value = res
 }
 
-function applyLeave() {
-  // applyDutyDrawer.value = true
-  displayApplyDuty(true)
-}
-
 function displayRecord(res) {
   exhibitDutyRecordDrawer.value = res
 }
@@ -292,6 +292,11 @@ function showMyRecord() {
 }
 
 onMounted(() => {
+  getDutyPauseState()
+    .then((res) => {
+      userStore.$patch({ duty_paused: !!res.data.paused })
+    })
+    .catch(() => {})
   checkDuty()
 })
 
@@ -304,13 +309,22 @@ onUnmounted(() => {
   <div class="main-layout">
     <div class="start-duty animate__animated animate__fadeInDown">
       <div class="sigb-btn-box">
-        <div v-if="!is_duty" class="sign-btn" @click="startDuty">签到</div>
+        <div
+          v-if="!is_duty"
+          class="sign-btn"
+          :class="{ disabled: userStore.duty_paused }"
+          @click="startDuty"
+        >
+          {{ userStore.duty_paused ? '已暂停' : '签到' }}
+        </div>
         <div v-else class="sign-btn" @click="finishDuty">签退</div>
       </div>
       <div class="now-duty">
         <div class="now-duty-time">{{ is_duty ? nowDuty.pass_time : '未值班' }}</div>
         <el-divider class="duty_divider" />
-        <div class="now-duty-state">{{ is_duty ? '值班中' : '快来值班吧~~' }}</div>
+        <div class="now-duty-state">
+          {{ userStore.duty_paused ? '暂停值班中' : is_duty ? '值班中' : '快来值班吧~~' }}
+        </div>
       </div>
       <div class="my-duty">
         <div class="record-btn my-duty-btn" @click="showMyRecord">值班记录</div>
@@ -321,11 +335,11 @@ onUnmounted(() => {
     <!-- <router-view name="Exhibition"></router-view> -->
     <exhibitDutyInfo> </exhibitDutyInfo>
 
-    <exhibitMyDutyRecord
+    <exhibitDutyCalendar
       v-if="exhibitDutyRecordDrawer"
       :drawer="exhibitDutyRecordDrawer"
       @displayRecord="displayRecord"
-    ></exhibitMyDutyRecord>
+    ></exhibitDutyCalendar>
 
     <applyDutyLeave
       v-if="applyDutyDrawer"
@@ -351,6 +365,12 @@ onUnmounted(() => {
   align-items: center;
 }
 
+.sign-btn.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: #999;
+  border-color: #999;
+}
 .sign-btn {
   display: flex;
   flex-direction: column;

@@ -41,11 +41,11 @@ export const dutyDayOption = [
 ]
 export const dutyFrameOption = [
   { label: '未安排', value: '0' },
-  { label: '第1-2节', value: '1' },
-  { label: '第3-4节', value: '2' },
-  { label: '第5-6节', value: '3' },
-  { label: '第7-8节', value: '4' },
-  { label: '第9-10节', value: '5' }
+  { label: '第1-2节（08:00-09:40）', value: '1' },
+  { label: '第3-4节（10:00-11:40）', value: '2' },
+  { label: '第5-6节（14:00-15:40）', value: '3' },
+  { label: '第7-8节（16:00-17:40）', value: '4' },
+  { label: '第9-10节（19:00-20:40）', value: '5' }
 ]
 
 // export const departmentFilter = [

@@ -1,5 +1,5 @@
 <script setup>
-import { http } from 'assets/js/http'
+import { addOneYoutholer as postAddMember } from 'assets/js/oaApi.js'
 import { less768 } from 'assets/js/screen'
 import { ref, reactive, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
@@ -67,20 +67,20 @@ const memberInfo = reactive({
 })
 
 function postAddOneYoutholer() {
-  http
-    .post('/AddOneYoutholer/', {
-      sdut_id: memberInfo.sdut_id,
-      name: memberInfo.name,
-      college: memberInfo.college,
-      grade: memberInfo.grade,
-      department: memberInfo.department,
-      identity: memberInfo.identity,
-      duty: memberInfo.duty
-    })
+  postAddMember({
+    sdut_id: memberInfo.sdut_id,
+    name: memberInfo.name,
+    college: memberInfo.college,
+    grade: memberInfo.grade,
+    department: memberInfo.department,
+    identity: memberInfo.identity,
+    duty: memberInfo.duty
+  })
     .then((res) => {
-      console.log(res)
-      if (res.data == '添加成功') {
-        successAlert('添加成功')
+      const data = res.data
+      if (data == '添加成功' || data?.message == '添加成功') {
+        const extra = data?.created ? `，已生成 ${data.created} 条本学期值班` : ''
+        successAlert('添加成功' + extra)
         emit('displayMemberAdd', false)
         emit('getInfo')
       } else {
@@ -89,7 +89,7 @@ function postAddOneYoutholer() {
     })
     .catch((err) => {
       console.log(err)
-      errorAlert('添加失败')
+      errorAlert(err.message || '添加失败')
     })
 }
 
