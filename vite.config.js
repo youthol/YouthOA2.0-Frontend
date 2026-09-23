@@ -8,7 +8,7 @@ import vue from '@vitejs/plugin-vue'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
-  base: process.env.VITE_APP_BASE || '/youthol/',
+  base: process.env.VITE_APP_BASE || '/yout-42/',
   build: {
     rollupOptions: {
       input: {

@@ -60,7 +60,7 @@ export function importOldYoutholers(payload) {
 }
 
 export function setMemberDutyOptions(payload) {
-  return useMock ? mock.setMemberDutyOptions(payload) : real('/SetMemberDutyOptions/', payload)
+  return useMock ? mock.setMemberDutyOptions(payload) : real('/SetYoutholerDutyOptions/', payload)
 }
 
 export function getMemberSemesterDuty(payload) {
@@ -68,7 +68,7 @@ export function getMemberSemesterDuty(payload) {
 }
 
 export function getDaySemesterDuty(payload) {
-  return useMock ? mock.getDaySemesterDuty(payload) : real('/GetDaySemesterDuty/', payload)
+  return useMock ? mock.getDaySemesterDuty(payload) : real('/GetDutyByDate/', payload)
 }
 
 export function getSingleDutyCalendar(payload) {
