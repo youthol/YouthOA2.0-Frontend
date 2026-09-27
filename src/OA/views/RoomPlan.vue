@@ -1,27 +1,35 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, reactive } from 'vue'
 import { http } from 'assets/js/http'
 import ExhibitRoomBorrow from '../components/exhibitRoomBorrow.vue'
 import { useUserStore } from 'store/store.js'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import exhibitMyBorrowRecord from '../components/exhibitMyBorrowRecord.vue'
+import { BORROW_ROOM_ID, isBorrowDateAllowed, isEmptyValue, toIsoDate } from 'assets/js/roomBorrow'
 
 let userStore = useUserStore()
 
 let borrowInfo = reactive({
-  dateValue: '',
-  startTime: '',
-  endTime: ''
+  dateValue: null,
+  startTime: null,
+  endTime: null
 })
 let chartRef = ref()
 let borrowFormRef = ref()
 
 const verifyBorrowInfo = (rule, value, callback) => {
-  if (borrowInfo.dateValue != '' && borrowInfo.startTime != '' && borrowInfo.endTime != '') {
-    console.log('test')
-    chartRef.value.add(borrowInfo.dateValue, borrowInfo.startTime, borrowInfo.endTime)
+  if (
+    !isEmptyValue(borrowInfo.dateValue) &&
+    !isEmptyValue(borrowInfo.startTime) &&
+    !isEmptyValue(borrowInfo.endTime)
+  ) {
+    chartRef.value?.add(borrowInfo.dateValue, borrowInfo.startTime, borrowInfo.endTime)
   }
   callback()
+}
+
+function disabledBorrowDate(date) {
+  return !isBorrowDateAllowed(toIsoDate(date))
 }
 const rules = reactive({
   dateValue: [
@@ -45,26 +53,18 @@ const rules = reactive({
   ]
 })
 
-let roomBorrowData
-let dateRange = ref([])
-function GetRoomBorrow() {
-  http
-    .post('/GetRoomBorrow/', {})
-    .then((res) => {
-      roomBorrowData = res.data
-      for (let i = roomBorrowData['recent14Day']['data'].length - 1; i >= 0; i--) {
-        dateRange.value.push({ label: roomBorrowData['recent14Day']['data'][i][0], value: i })
-      }
-    })
-    .catch((err) => {
-      console.log(err)
-    })
-}
-
 let applying = false
 function applyRoom() {
-  if (borrowInfo.dateValue == '' || borrowInfo.startTime == '' || borrowInfo.endTime == '') {
+  if (
+    isEmptyValue(borrowInfo.dateValue) ||
+    isEmptyValue(borrowInfo.startTime) ||
+    isEmptyValue(borrowInfo.endTime)
+  ) {
     errorAlert('请完善信息')
+    return
+  }
+  if (!isBorrowDateAllowed(borrowInfo.dateValue)) {
+    errorAlert('日期超出可借用范围')
     return
   }
   if (applying) {
@@ -74,11 +74,11 @@ function applyRoom() {
   applying = true
   http
     .post('/ApplyRoomBorrow/', {
-      date: borrowInfo.dateValue,
+      borrow_date: borrowInfo.dateValue,
       start_time: borrowInfo.startTime,
       end_time: borrowInfo.endTime,
       people: userStore.department,
-      room_id: '302'
+      room_id: BORROW_ROOM_ID
     })
     .then((res) => {
       applying = false
@@ -86,19 +86,19 @@ function applyRoom() {
         successAlert('借用成功')
       } else if (res.data == 'busy') {
         errorAlert('借用失败')
+      } else if (typeof res.data == 'string' && res.data.length > 0) {
+        errorAlert(res.data)
       } else {
         errorAlert('未知错误')
       }
     })
     .then(() => {
-      chartRef.value.GetNewData()
+      chartRef.value?.GetNewData()
     })
-    .catch(() => {})
+    .catch(() => {
+      applying = false
+    })
 }
-
-onMounted(() => {
-  GetRoomBorrow()
-})
 
 let borrowRecordDrawer = ref(false)
 
@@ -121,14 +121,14 @@ function openMyBorrowRecord() {
       style="max-width: 860px"
     >
       <el-form-item prop="dateValue" label="借用日期" class="form-item">
-        <el-select v-model="borrowInfo.dateValue" clearable placeholder="Select">
-          <el-option
-            v-for="item in dateRange"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
+        <el-date-picker
+          v-model="borrowInfo.dateValue"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="选择日期"
+          :disabled-date="disabledBorrowDate"
+          clearable
+        />
       </el-form-item>
       <el-form-item prop="startTime" label="借用开始时间" class="form-item">
         <el-time-select

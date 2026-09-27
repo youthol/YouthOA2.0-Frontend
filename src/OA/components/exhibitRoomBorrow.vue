@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, defineExpose } from 'vue'
 import { http } from 'assets/js/http'
+import { rowIndexForBorrowDate } from 'assets/js/roomBorrow'
 import * as echarts from 'echarts'
 
 let _width = ref('100%')
@@ -33,7 +34,7 @@ var DATA_ZOOM_X_INSIDE_INDEX = 1
 var DATA_ZOOM_Y_INSIDE_INDEX = 3
 var DATA_ZOOM_AUTO_MOVE_SPEED = 0.2
 var DATA_ZOOM_AUTO_MOVE_DETECT_AREA_WIDTH = 30
-var _draggable
+var _draggable = false
 var _draggingEl
 var _dropShadow
 var _draggingCursorOffset = [0, 0]
@@ -514,9 +515,13 @@ onMounted(() => {
   GetRoomBorrow()
 })
 
-const add = (date, start, end) => {
-  if (_option == null) {
-    console.log('1123s')
+const add = (isoDate, start, end) => {
+  if (_option == null || roomBorrowData == null || myChart == null) {
+    return
+  }
+  const date = rowIndexForBorrowDate(roomBorrowData.recent14Day?.data, isoDate)
+  if (date < 0) {
+    return
   }
   let new_option = makeOption()
   for (let i = 0; i < roomBorrowData.borrowTime.data.length; i++) {

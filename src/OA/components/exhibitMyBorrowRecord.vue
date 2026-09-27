@@ -3,6 +3,7 @@ import { http } from 'assets/js/http'
 // import { less768 } from 'assets/js/screen'
 import { ref, reactive, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
+import { BORROW_ROOM_ID } from 'assets/js/roomBorrow'
 
 defineProps(['drawer'])
 const emit = defineEmits(['displayBorrowRecord'])
@@ -14,7 +15,7 @@ let _size = ref('70%')
 function getBorrowInfo() {
   http
     .post('/GetSingleBorrowRecord/', {
-      room_id: '302'
+      room_id: BORROW_ROOM_ID
     })
     .then((res) => {
       console.log(res)
@@ -35,6 +36,7 @@ function getBorrowInfo() {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('获取借用信息失败')
     })
 }
 
@@ -76,6 +78,7 @@ const cancelBorrow = (index, row) => {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('取消失败')
     })
 }
 </script>

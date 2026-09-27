@@ -4,11 +4,12 @@ import { less768 } from 'assets/js/screen'
 import { http } from 'assets/js/http'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import { departmentFilter } from 'assets/js/filter.js'
+import { BORROW_ROOM_ID, hasBorrowRange } from 'assets/js/roomBorrow'
 
 const tableRef = ref()
 
 let tableData = reactive([])
-let dateRange = ref('')
+let dateRange = ref(null)
 let loading = ref(false)
 let _date_picker_size = ref('large')
 let _table_size = ref('large')
@@ -24,11 +25,7 @@ function getDutyInfo() {
     return
   }
 
-  if (dateRange.value[0] == '' || dateRange.value[1] == '') {
-    errorAlert('请选择时间')
-    return
-  }
-  if (dateRange.value[0] === undefined || dateRange.value[1] === undefined) {
+  if (!hasBorrowRange(dateRange.value)) {
     errorAlert('请选择时间')
     return
   }
@@ -36,7 +33,7 @@ function getDutyInfo() {
   loading.value = true
   http
     .post('/GetRoomBorrowRecordInRange/', {
-      room_id: '302',
+      room_id: BORROW_ROOM_ID,
       start_time: dateRange.value[0],
       end_time: dateRange.value[1]
     })
