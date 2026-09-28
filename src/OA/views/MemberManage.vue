@@ -13,6 +13,7 @@ import {
   getSemesterCatalog,
   setCurrentSemester,
   setSemesterDutyRange,
+  generateSemesterDuty,
   initPassword
 } from 'assets/js/oaApi.js'
 
@@ -156,6 +157,10 @@ function onSemesterChange(id) {
     })
 }
 
+function apiErrorCode(err, fallback) {
+  return err?.response?.data?.error || fallback
+}
+
 function saveSemester() {
   if (savingSemester.value) return
   if (!currentSemesterId.value) {
@@ -173,19 +178,33 @@ function saveSemester() {
   savingSemester.value = true
   setSemesterDutyRange({
     semester_id: currentSemesterId.value,
-    start_date: semester.start_date,
-    end_date: semester.end_date
+    semester_start: semester.start_date,
+    duty_end: semester.end_date
   })
     .then((res) => {
+      const saved = res.data?.data
+      const item = saved && typeof saved === 'object' ? { ...saved } : {}
+      delete item.need_generate
+      patchCatalogItem({
+        id: item.id || currentSemesterId.value,
+        ...item,
+        semester_start: item.semester_start || semester.start_date,
+        duty_end: item.duty_end || semester.end_date
+      })
+      return generateSemesterDuty({ semester_id: currentSemesterId.value })
+    })
+    .then((res) => {
       savingSemester.value = false
-      const item = { ...(res.data || {}) }
-      delete item.created
-      patchCatalogItem(item)
-      successAlert('学期值班区间已保存，将按新区间补齐班次，对全部值班成员生效')
+      const count = res.data?.data?.created_count
+      if (typeof count !== 'number') {
+        errorAlert('生成班次失败')
+        return
+      }
+      successAlert(`学期已保存，新生成 ${count} 条班次`)
     })
     .catch((err) => {
       savingSemester.value = false
-      errorAlert(err.message || '保存失败')
+      errorAlert(apiErrorCode(err, '保存失败'))
     })
 }
 
@@ -353,6 +372,7 @@ onMounted(() => {
       @getInfo="getAllYoutholer"
       :drawer="modifyDrawer"
       :info="editInfo"
+      :semester-id="currentSemesterId"
     ></modifyMemberInfo>
 
     <addNewYoutholer

@@ -1,5 +1,5 @@
 <script setup>
-import { modifySingleYoutholInfo, deleteYoutholer } from 'assets/js/oaApi.js'
+import { modifySingleYoutholInfo, deleteYoutholer, generateSemesterDuty } from 'assets/js/oaApi.js'
 import { less768 } from 'assets/js/screen'
 import { reactive, onMounted, ref } from 'vue'
 import { errorAlert, successAlert, messageBox } from 'assets/js/message.js'
@@ -10,10 +10,14 @@ import {
   dutyFrameOption
 } from 'assets/js/filter.js'
 
-const propData = defineProps(['drawer', 'info'])
+const propData = defineProps(['drawer', 'info', 'semesterId'])
 const emit = defineEmits(['displayMemberEdit', 'getInfo'])
 
 let memberInfo = reactive(propData.info)
+
+function filledDuty(duty) {
+  return (duty || []).filter((item) => item != null && item.day != 0 && item.day != '0')
+}
 
 function modifyMemberInfo() {
   if (
@@ -25,23 +29,37 @@ function modifyMemberInfo() {
     errorAlert('请完善值班信息')
     return
   }
+  if (propData.semesterId == null || String(propData.semesterId).length === 0) {
+    errorAlert('请先选择学年学期')
+    return
+  }
 
   modifySingleYoutholInfo({
     sdut_id: memberInfo.sdut_id,
     department: memberInfo.department,
     name: memberInfo.name,
     identity: memberInfo.identity,
-    duty: memberInfo.duty
+    duty: filledDuty(memberInfo.duty)
   })
+    .then(() => {
+      return generateSemesterDuty({
+        semester_id: propData.semesterId,
+        sdut_id: memberInfo.sdut_id
+      })
+    })
     .then((res) => {
-      const extra = res.data?.created ? `，新生成 ${res.data.created} 条值班` : ''
-      successAlert('修改成功' + extra)
+      const count = res.data?.data?.created_count
+      if (typeof count !== 'number') {
+        errorAlert('生成班次失败')
+        return
+      }
+      successAlert(`修改成功，新生成 ${count} 条班次`)
       emit('displayMemberEdit', false)
       emit('getInfo')
     })
     .catch((err) => {
       console.log(err)
-      errorAlert(err.message || '修改失败')
+      errorAlert(err?.response?.data?.error || '修改失败')
     })
 }
 

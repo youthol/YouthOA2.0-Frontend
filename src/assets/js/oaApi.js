@@ -31,6 +31,12 @@ export function setSemesterDutyRange(payload) {
   return useMock ? mock.setSemesterDutyRange(payload) : real('/SetSemesterDutyRange/', payload)
 }
 
+export function generateSemesterDuty(payload) {
+  return useMock
+    ? Promise.resolve({ data: { ok: true, data: { created_count: 0 }, error: null } })
+    : real('/GenerateSemesterDuty/', payload)
+}
+
 export function getAllYoutholer() {
   return useMock ? mock.getAllYoutholer() : real('/GetAllYoutholer/', {})
 }

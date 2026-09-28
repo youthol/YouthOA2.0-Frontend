@@ -6,28 +6,52 @@ import { formatScheduleLine as formatSlot } from 'assets/js/dutyFrame.js'
 import { getMemberSemesterDuty, getDaySemesterDuty } from 'assets/js/oaApi.js'
 import dutyStatusDots from './dutyStatusDots.vue'
 
-const memberKeyword = ref('')
+const memberSdutId = ref('')
 const dayValue = ref('')
 const memberRows = ref([])
 const dayRows = ref([])
 const memberState = ref('idle')
 const dayState = ref('idle')
 
+function apiErrorCode(err, fallback) {
+  return err?.response?.data?.error || fallback
+}
+
+function readBody(res) {
+  const body = res?.data?.data
+  if (!body || typeof body !== 'object' || !Array.isArray(body.items)) return null
+  return body
+}
+
 function queryMember() {
-  if (!memberKeyword.value.trim()) {
-    errorAlert('请输入成员姓名或学号')
+  const sdutId = memberSdutId.value.trim()
+  if (!sdutId) {
+    errorAlert('请输入学号')
     return
   }
   memberState.value = 'loading'
-  getMemberSemesterDuty({ keyword: memberKeyword.value.trim() })
+  getMemberSemesterDuty({ sdut_id: sdutId })
     .then((res) => {
-      memberRows.value = res.data || []
+      const body = readBody(res)
+      if (!body) {
+        memberRows.value = []
+        memberState.value = 'fail'
+        errorAlert('查询失败')
+        return
+      }
+      memberRows.value = body.items.map((item) => ({
+        ...item,
+        sdut_id: item.sdut_id || body.sdut_id,
+        name: item.name || body.name,
+        department: item.department || body.department
+      }))
       memberState.value = memberRows.value.length ? 'ok' : 'empty'
       if (memberRows.value.length) successAlert(`共找到 ${memberRows.value.length} 条排班`)
     })
     .catch((err) => {
+      memberRows.value = []
       memberState.value = 'fail'
-      errorAlert(err.message || '查询失败')
+      errorAlert(apiErrorCode(err, '查询失败'))
     })
 }
 
@@ -39,13 +63,24 @@ function queryDay() {
   dayState.value = 'loading'
   getDaySemesterDuty({ date: dayValue.value })
     .then((res) => {
-      dayRows.value = res.data || []
+      const body = readBody(res)
+      if (!body) {
+        dayRows.value = []
+        dayState.value = 'fail'
+        errorAlert('查询失败')
+        return
+      }
+      dayRows.value = body.items.map((item) => ({
+        ...item,
+        date: item.date || body.date
+      }))
       dayState.value = dayRows.value.length ? 'ok' : 'empty'
       if (dayRows.value.length) successAlert(`当天共 ${dayRows.value.length} 人值班`)
     })
     .catch((err) => {
+      dayRows.value = []
       dayState.value = 'fail'
-      errorAlert(err.message || '查询失败')
+      errorAlert(apiErrorCode(err, '查询失败'))
     })
 }
 
@@ -57,7 +92,7 @@ function line(row) {
   <div class="schedule-box">
     <h3 class="title">排班查询</h3>
     <div class="query-row">
-      <el-input v-model="memberKeyword" placeholder="搜某成员（姓名或学号）" class="query-input" />
+      <el-input v-model="memberSdutId" placeholder="输入学号" class="query-input" />
       <div class="btn" @click="queryMember">按人查询</div>
     </div>
     <el-table :data="memberRows" v-loading="memberState === 'loading'" empty-text="暂无数据" class="table">
