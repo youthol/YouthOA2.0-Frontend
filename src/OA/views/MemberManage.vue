@@ -127,7 +127,7 @@ function patchCatalogItem(item) {
 function loadSemester() {
   getSemesterCatalog()
     .then((res) => {
-      const list = res.data?.list || res.data || []
+      const list = res.data?.data
       catalog.value = Array.isArray(list) ? list : []
       const current = catalog.value.find((item) => item.is_current) || catalog.value[0] || null
       currentSemesterId.value = current?.id || ''
