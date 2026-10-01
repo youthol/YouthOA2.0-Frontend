@@ -515,9 +515,7 @@ onMounted(() => {
 })
 
 const add = (date, start, end) => {
-  if (_option == null) {
-    console.log('1123s')
-  }
+  if (roomBorrowData == null || myChart == null) return
   let new_option = makeOption()
   for (let i = 0; i < roomBorrowData.borrowTime.data.length; i++) {
     if (roomBorrowData.borrowTime.data[i][3] == '当前选择') {

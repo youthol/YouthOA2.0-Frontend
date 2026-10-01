@@ -15,8 +15,6 @@ let borrowInfo = reactive({
 })
 let chartRef = ref()
 let borrowFormRef = ref()
-let allowedDates = ref([])
-
 function hasValue(value) {
   return value != null && String(value).length > 0
 }
@@ -27,8 +25,35 @@ function dateKey(date) {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+function localAllowedDates() {
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  const dates = []
+  for (let offset = 0; offset < 14; offset += 1) {
+    const day = new Date(today)
+    day.setDate(today.getDate() + offset)
+    dates.push(dateKey(day))
+  }
+  return dates
+}
+
+let allowedDates = ref(localAllowedDates())
+
 function disableBorrowDate(date) {
   return !allowedDates.value.includes(dateKey(date))
+}
+
+function rowIndexForDate(isoDate) {
+  const rows = roomBorrowData?.recent14Day?.data
+  if (!Array.isArray(rows)) return -1
+  const found = rows.findIndex((row) => row[1] === isoDate)
+  if (found >= 0) return found
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const picked = new Date(`${isoDate}T00:00:00`)
+  const offset = Math.round((picked.getTime() - today.getTime()) / 86400000)
+  if (offset < 0 || offset > 13 || rows.length !== 14) return -1
+  return 13 - offset
 }
 
 let roomBorrowData
@@ -37,10 +62,8 @@ function previewBorrow() {
   if (!hasValue(borrowInfo.dateValue) || !hasValue(borrowInfo.startTime) || !hasValue(borrowInfo.endTime)) {
     return
   }
-  const rows = roomBorrowData?.recent14Day?.data
-  if (!Array.isArray(rows) || chartRef.value == null) return
-  const index = rows.findIndex((row) => row[1] === borrowInfo.dateValue)
-  if (index < 0) return
+  const index = rowIndexForDate(borrowInfo.dateValue)
+  if (index < 0 || chartRef.value == null) return
   try {
     chartRef.value.add(index, borrowInfo.startTime, borrowInfo.endTime)
   } catch (err) {
@@ -80,18 +103,19 @@ function GetRoomBorrow() {
     .then((res) => {
       roomBorrowData = res.data
       const rows = roomBorrowData?.recent14Day?.data
-      if (!Array.isArray(rows)) {
-        allowedDates.value = []
-        errorAlert('获取可借日期失败')
+      const fromApi = Array.isArray(rows)
+        ? rows.map((row) => row[1]).filter((value) => value != null && String(value).length > 0)
+        : []
+      if (fromApi.length) {
+        allowedDates.value = fromApi
         return
       }
-      allowedDates.value = rows
-        .map((row) => row[1])
-        .filter((value) => value != null && String(value).length > 0)
+      allowedDates.value = localAllowedDates()
+      errorAlert('获取可借日期失败')
     })
     .catch((err) => {
       console.log(err)
-      allowedDates.value = []
+      allowedDates.value = localAllowedDates()
       errorAlert('获取可借日期失败')
     })
 }
@@ -102,8 +126,7 @@ function applyRoom() {
     errorAlert('请完善信息')
     return
   }
-  const rows = roomBorrowData?.recent14Day?.data
-  if (!Array.isArray(rows) || !rows.some((row) => row[1] === borrowInfo.dateValue)) {
+  if (!allowedDates.value.includes(borrowInfo.dateValue)) {
     errorAlert('请选择借用日期')
     return
   }

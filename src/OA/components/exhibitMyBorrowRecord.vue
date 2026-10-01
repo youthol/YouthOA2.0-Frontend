@@ -17,8 +17,11 @@ function getBorrowInfo() {
       room_id: '302'
     })
     .then((res) => {
-      console.log(res)
       let data = res.data
+      if (!Array.isArray(data)) {
+        errorAlert('获取借用信息失败')
+        return
+      }
       tableData.length = 0
       for (let i = 0; i < data.length; i++) {
         let temp = {
@@ -35,6 +38,7 @@ function getBorrowInfo() {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('获取借用信息失败')
     })
 }
 
@@ -76,6 +80,7 @@ const cancelBorrow = (index, row) => {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('取消失败')
     })
 }
 </script>

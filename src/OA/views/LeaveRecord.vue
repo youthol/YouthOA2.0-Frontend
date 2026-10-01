@@ -66,6 +66,13 @@ function query() {
     })
 }
 
+function reasonText(row) {
+  const reason = row?.reason || ''
+  const detail = String(row?.reason_detail || '').trim()
+  if (reason === '其他' && detail) return `其他（${detail}）`
+  return reason
+}
+
 function openDetail(row) {
   detail.value = row
   detailVisible.value = true
@@ -113,6 +120,9 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="是否补班">
         <template #default="scope">{{ scope.row.has_makeup ? '是' : '否' }}</template>
+      </el-table-column>
+      <el-table-column label="请假原因" min-width="160">
+        <template #default="scope">{{ reasonText(scope.row) }}</template>
       </el-table-column>
       <el-table-column label="操作">
         <template #default="scope">

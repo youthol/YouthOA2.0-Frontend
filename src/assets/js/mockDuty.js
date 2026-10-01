@@ -536,12 +536,28 @@ export function getSingleDutyCalendar(payload) {
   return ok(clone(list))
 }
 
+function dateOnly(value) {
+  return String(value || '').slice(0, 10)
+}
+
+function refreshSlotStatus() {
+  let changed = false
+  state.slots.forEach((slot) => {
+    const before = `${slot.status}|${JSON.stringify(slot.flags || [])}`
+    decorateStatus(slot)
+    const after = `${slot.status}|${JSON.stringify(slot.flags || [])}`
+    if (before !== after) changed = true
+  })
+  if (changed) save()
+}
+
 export function getDutyStatusInRange(payload) {
-  const start = payload?.start_time || payload?.start_date
-  const end = payload?.end_time || payload?.end_date
+  const start = dateOnly(payload?.start_time || payload?.start_date)
+  const end = dateOnly(payload?.end_time || payload?.end_date)
   if (!start || !end) return fail('请选择时间')
+  refreshSlotStatus()
   const list = state.slots
-    .filter((slot) => slot.date >= start && slot.date <= end)
+    .filter((slot) => slot.date >= start && slot.date <= end && slot.source !== 'makeup-cancelled')
     .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time))
   return ok(clone(list))
 }

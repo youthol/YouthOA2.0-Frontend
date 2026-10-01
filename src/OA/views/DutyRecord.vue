@@ -12,7 +12,7 @@ import { departmentFilter, identityFilter } from 'assets/js/filter.js'
 const tableRef = ref()
 
 let tableData = reactive([])
-let dateRange = ref('')
+let dateRange = ref(null)
 let loading = ref(false)
 
 const filterHandler = (value, row, column) => {
@@ -58,11 +58,13 @@ function getDutyInfo() {
     return
   }
 
-  if (dateRange.value[0] == '' || dateRange.value[1] == '') {
-    errorAlert('请选择时间')
-    return
-  }
-  if (dateRange.value[0] === undefined || dateRange.value[1] === undefined) {
+  if (
+    dateRange.value == null ||
+    !Array.isArray(dateRange.value) ||
+    dateRange.value.length < 2 ||
+    dateRange.value[0] == null ||
+    dateRange.value[1] == null
+  ) {
     errorAlert('请选择时间')
     return
   }
