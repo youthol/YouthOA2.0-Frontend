@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import { errorAlert } from 'assets/js/message.js'
 import { useUserStore } from 'store/store.js'
 import { getSingleDutyCalendar } from 'assets/js/oaApi.js'
+import { readDutyItems } from 'assets/js/dutyStatus.js'
 import dutyCalendar from './dutyCalendar.vue'
 
 defineProps(['drawer'])
@@ -23,7 +24,13 @@ onMounted(() => {
   loading.value = true
   getSingleDutyCalendar({ sdut_id: userStore.sdut_id })
     .then((res) => {
-      slots.value = res.data || []
+      const items = readDutyItems(res.data)
+      if (!items) {
+        slots.value = []
+        errorAlert('获取值班记录失败')
+      } else {
+        slots.value = items
+      }
       loading.value = false
     })
     .catch((err) => {

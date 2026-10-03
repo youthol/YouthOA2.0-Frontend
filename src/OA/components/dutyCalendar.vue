@@ -102,7 +102,7 @@ const title = computed(() => {
     </div>
     <div class="legend">
       <span v-for="item in CALENDAR_LEGEND" :key="item.label" class="legend-item">
-        <dutyStatusDots :status="item.status" :source="item.source" :flags="item.flags" :size="14" />
+        <dutyStatusDots :color-code="item.colorCode" :append-yellow="item.appendYellow" :size="14" />
         {{ item.label }}
       </span>
     </div>
@@ -120,7 +120,9 @@ const title = computed(() => {
             <div class="circles">
               <dutyStatusDots
                 v-for="slot in cell.slots"
-                :key="slot.id"
+                :key="slot.id || slot.date + '-' + slot.sdut_id + '-' + slot.frame"
+                :color-code="slot.color_code"
+                :append-yellow="slot.append_yellow"
                 :status="slot.status"
                 :flags="slot.flags"
                 :source="slot.source"
@@ -138,7 +140,14 @@ const title = computed(() => {
           <span v-for="day in item.days" :key="day.key" class="mini-day">
             {{ day.day }}
             <i v-if="day.slots.length" class="mini-dot" :style="{ background: day.slots[0] ? undefined : '#9aa0a6' }">
-              <dutyStatusDots :status="day.slots[0].status" :flags="day.slots[0].flags" :source="day.slots[0].source" :size="8" />
+              <dutyStatusDots
+                :color-code="day.slots[0].color_code"
+                :append-yellow="day.slots[0].append_yellow"
+                :status="day.slots[0].status"
+                :flags="day.slots[0].flags"
+                :source="day.slots[0].source"
+                :size="8"
+              />
             </i>
           </span>
         </div>

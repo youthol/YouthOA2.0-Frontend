@@ -5,8 +5,8 @@ const LIGHT_RED = '#f5b7b8'
 const LIGHT_GRAY = '#cfd3d7'
 const WHITE = '#ffffff'
 
-function paint(fill, border, label, kind) {
-  return { color: fill, fill, border, label, kind }
+function paint(fill, border, label, kind, ring = false) {
+  return { color: fill, fill, border, label, kind, ring }
 }
 
 export const STATUS_META = {
@@ -28,15 +28,35 @@ export const FLAG_LABEL = {
 }
 
 export const CALENDAR_LEGEND = [
-  { label: '未到值班日', status: 'upcoming', source: 'schedule', flags: [] },
-  { label: '正常值班', status: 'normal', source: 'schedule', flags: [] },
-  { label: '正常但迟到/早退/未签退', status: 'normal', source: 'schedule', flags: ['late'] },
-  { label: '未请假未值班', status: 'absent', source: 'schedule', flags: [] },
-  { label: '补班还未到', status: 'upcoming', source: 'makeup', flags: [] },
-  { label: '请假后正常 / 调班后正常', status: 'leave_normal', source: 'makeup', flags: [] },
-  { label: '补班来了但不规范', status: 'leave_normal', source: 'makeup', flags: ['late'] },
-  { label: '请假后未值班 / 调班后未值班', status: 'leave_absent', source: 'makeup', flags: [] }
+  { label: '未到值班日', colorCode: 'hollow', appendYellow: false },
+  { label: '正常值班', colorCode: 'dark_green', appendYellow: false },
+  { label: '正常但迟到/早退/未签退', colorCode: 'dark_green', appendYellow: true },
+  { label: '未请假未值班', colorCode: 'dark_red', appendYellow: false }
 ]
+
+export function visualFromColor(colorCode, appendYellow) {
+  const yellow = appendYellow === true || appendYellow === 'true'
+  if (colorCode === 'dark_green') {
+    return paint(
+      DARK_GREEN,
+      yellow ? FLAG_COLOR : DARK_GREEN,
+      yellow ? '正常但迟到/早退/未签退' : '正常值班',
+      'original',
+      yellow
+    )
+  }
+  if (colorCode === 'dark_red') {
+    return paint(DARK_RED, DARK_RED, '未请假未值班', 'original', false)
+  }
+  return paint(LIGHT_GRAY, LIGHT_GRAY, '未到值班日', 'original', false)
+}
+
+export function readDutyItems(body) {
+  if (Array.isArray(body)) return body
+  if (Array.isArray(body?.data?.items)) return body.data.items
+  if (Array.isArray(body?.items)) return body.items
+  return null
+}
 
 export function resolveSlotVisual(slot = {}) {
   const source = slot.source
@@ -68,12 +88,13 @@ export function isCalendarVisible(slot) {
 
 export function getDotStyle(meta, size) {
   const kind = meta?.kind || 'original'
-  const borderWidth = kind === 'makeup' ? Math.max(2, Math.round(size / 7)) : 0
+  const ring = !!meta?.ring
+  const borderWidth = ring || kind === 'makeup' ? Math.max(2, Math.round(size / 7)) : 0
   return {
     width: size + 'px',
     height: size + 'px',
     background: meta?.fill || meta?.color || LIGHT_GRAY,
-    border: borderWidth ? `${borderWidth}px solid ${meta.border}` : 'none',
+    border: borderWidth ? `${borderWidth}px solid ${meta?.border || FLAG_COLOR}` : 'none',
     boxSizing: 'border-box'
   }
 }
