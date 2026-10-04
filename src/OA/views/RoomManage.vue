@@ -38,7 +38,6 @@ function getDutyInfo() {
   loading.value = true
   http
     .post('/GetRoomBorrowRecordInRange/', {
-      room_id: '302',
       start_time: dateRange.value[0],
       end_time: dateRange.value[1]
     })
