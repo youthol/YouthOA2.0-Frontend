@@ -8,7 +8,8 @@ import { departmentFilter } from 'assets/js/filter.js'
 const tableRef = ref()
 
 let tableData = reactive([])
-let dateRange = ref('')
+let dateRange = ref(null)
+let roomId = ref('')
 let loading = ref(false)
 let _date_picker_size = ref('large')
 let _table_size = ref('large')
@@ -24,25 +25,31 @@ function getDutyInfo() {
     return
   }
 
-  if (dateRange.value[0] == '' || dateRange.value[1] == '') {
-    errorAlert('请选择时间')
-    return
-  }
-  if (dateRange.value[0] === undefined || dateRange.value[1] === undefined) {
+  if (
+    dateRange.value == null ||
+    !Array.isArray(dateRange.value) ||
+    dateRange.value.length < 2 ||
+    dateRange.value[0] == null ||
+    dateRange.value[1] == null
+  ) {
     errorAlert('请选择时间')
     return
   }
 
+  const room = String(roomId.value || '').trim()
+  const payload = {
+    start_time: dateRange.value[0],
+    end_time: dateRange.value[1]
+  }
+  if (room) payload.room_id = room
+
   loading.value = true
   http
-    .post('/GetRoomBorrowRecordInRange/', {
-      room_id: '302',
-      start_time: dateRange.value[0],
-      end_time: dateRange.value[1]
-    })
+    .post('/GetRoomBorrowRecordInRange/', payload)
     .then((res) => {
       console.log(res)
       let data = res.data
+      if (!Array.isArray(data)) data = []
       tableData.length = 0
       for (let i = 0; i < data.length; i++) {
         let item = {
@@ -137,6 +144,12 @@ const shortcuts = [
 <template>
   <div class="main-layout">
     <div class="options">
+      <el-input
+        v-model="roomId"
+        class="room-input"
+        placeholder="房间号，留空查全部"
+        clearable
+      />
       <div class="date-picker">
         <el-date-picker
           v-model="dateRange"
@@ -197,6 +210,11 @@ const shortcuts = [
   align-items: center;
 }
 
+.room-input {
+  width: 220px;
+  margin-right: 12px;
+}
+
 .btn {
   font-size: 20px;
   margin: 8px 20px;
@@ -219,8 +237,9 @@ const shortcuts = [
 }
 
 @media only screen and (max-width: 768px) {
+  .room-input,
   .date-picker {
-    margin: 20px 0;
+    margin: 12px 0;
   }
 
   .table {
