@@ -3,7 +3,7 @@ import { less768 } from 'assets/js/screen'
 import { onMounted, ref } from 'vue'
 import { errorAlert } from 'assets/js/message.js'
 import { useUserStore } from 'store/store.js'
-import { getSingleDutyCalendar } from 'assets/js/oaApi.js'
+import { getSingleDutyCalendar, listFrom } from 'assets/js/oaApi.js'
 import dutyCalendar from './dutyCalendar.vue'
 
 defineProps(['drawer'])
@@ -23,7 +23,7 @@ onMounted(() => {
   loading.value = true
   getSingleDutyCalendar({ sdut_id: userStore.sdut_id })
     .then((res) => {
-      slots.value = res.data || []
+      slots.value = listFrom(res)
       loading.value = false
     })
     .catch((err) => {

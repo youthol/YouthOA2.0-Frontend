@@ -4,7 +4,7 @@ import { useUserStore } from 'store/store.js'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import { dutyFrameSelectOption, frameLabelWithTime } from 'assets/js/dutyFrame.js'
 import { combineDateTime, toDateKey } from 'assets/js/datetime.js'
-import { applyLeaveAdjust, getSingleDutyCalendar, canApplyLeave, canApplyMakeup, bindCurrentUser } from 'assets/js/oaApi.js'
+import { applyLeaveAdjust, getSingleDutyCalendar, canApplyLeave, canApplyMakeup, bindCurrentUser, listFrom } from 'assets/js/oaApi.js'
 import { beijingTodayKey, beijingDateKey, isMakeupStartPassed } from 'assets/js/leaveRule.js'
 
 const userStore = useUserStore()
@@ -203,7 +203,7 @@ function loadSlots() {
   })
     .then(() => getSingleDutyCalendar({ sdut_id: id }))
     .then((res) => {
-      const list = Array.isArray(res.data) ? res.data : []
+      const list = listFrom(res)
       slots.value = list
       if (!list.length) {
         errorAlert('当前账号没有已生成的原值班日期，请先在成员管理中配置值班')

@@ -29,6 +29,33 @@ export function objectFrom(res) {
 }
 
 
+const LEAVE_ERROR_TEXT = {
+  SEMESTER_NOT_CONFIGURED: '当前学期未配置',
+  SDUT_ID_REQUIRED: '缺少学号',
+  FORBIDDEN: '没有权限',
+  MEMBER_NOT_FOUND: '成员不存在',
+  SLOT_NOT_FOUND: '请选择原值班时间',
+  LEAVE_TOO_LATE: '值班开始前半小时内不可申请请假',
+  MAKEUP_REQUIRED: '请选择补班时间',
+  REASON_REQUIRED: '请选择申请原因',
+  REASON_DETAIL_REQUIRED: '请填写具体原因',
+  MAKEUP_SAME_SLOT: '补班不能和原班同一天同一节',
+  MAKEUP_PASSED: '不能补已经过去的班',
+  MAKEUP_OCCUPIED: '该时间已有值班安排，请选择其他补班时间',
+  INVALID_FRAME: '补班节次无效',
+  INVALID_DATE: '请选择时间',
+  INVALID_RANGE: '截止日期不能早于开始日期',
+  INVALID_REASON: '申请原因无效'
+}
+
+function explainLeaveError(err) {
+  const code = err?.response?.data?.error
+  if (typeof code === 'string' && LEAVE_ERROR_TEXT[code]) {
+    return Promise.reject(new Error(LEAVE_ERROR_TEXT[code]))
+  }
+  return Promise.reject(err)
+}
+
 export function pausedFrom(res) {
   const body = res?.data
   if (body && typeof body.paused === 'boolean') return body.paused
@@ -110,11 +137,11 @@ export function getMemberUpcomingSlots(payload) {
 }
 
 export function applyLeaveAdjust(payload) {
-  return useMock ? mock.applyLeaveAdjust(payload) : real('/ApplyLeaveAdjust/', payload)
+  return useMock ? mock.applyLeaveAdjust(payload) : real('/ApplyLeaveAdjust/', payload).catch(explainLeaveError)
 }
 
 export function getLeaveRecords(payload) {
-  return useMock ? mock.getLeaveRecords(payload) : real('/GetLeaveRecords/', payload)
+  return useMock ? mock.getLeaveRecords(payload) : real('/GetLeaveRecords/', payload).catch(explainLeaveError)
 }
 
 export function getDutyPauseState() {

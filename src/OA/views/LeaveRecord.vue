@@ -2,16 +2,21 @@
 import { less768 } from 'assets/js/screen'
 import { ref, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
-import { formatDateTime, combineDateTime } from 'assets/js/datetime.js'
-import { formatScheduleLine } from 'assets/js/dutyFrame.js'
-import { getLeaveRecords } from 'assets/js/oaApi.js'
+import { WEEKDAY_SHORT } from 'assets/js/dutyFrame.js'
+import { getLeaveRecords, listFrom } from 'assets/js/oaApi.js'
 import { departmentFilter } from 'assets/js/filter.js'
+
+const FRAME_PERIOD = {
+  1: '一二节（8：00~9：40）',
+  2: '三四节（10：05~11：45）',
+  3: '五六节（14：00~15：40）',
+  4: '七八节（16：05~17：45）',
+  5: '九十节（19：00~20：40）'
+}
 
 const tableData = ref([])
 const dateRange = ref('')
 const loading = ref(false)
-const detail = ref(null)
-const detailVisible = ref(false)
 const _date_picker_size = ref('large')
 const _table_size = ref('large')
 
@@ -56,7 +61,7 @@ function query() {
     end_time: dateRange.value[1]
   })
     .then((res) => {
-      tableData.value = res.data || []
+      tableData.value = listFrom(res)
       loading.value = false
       successAlert('共找到' + tableData.value.length + '条请假记录')
     })
@@ -66,9 +71,24 @@ function query() {
     })
 }
 
-function openDetail(row) {
-  detail.value = row
-  detailVisible.value = true
+function reasonText(row) {
+  const reason = row?.reason || ''
+  const detail = String(row?.reason_detail || '').trim()
+  if (reason === '其他' && detail) return `其他（${detail}）`
+  return reason
+}
+
+function slotLabel(slot) {
+  if (!slot?.date) return { date: '', period: '' }
+  const [year, month, day] = String(slot.date).split('-')
+  if (!year || !month || !day) return { date: '', period: '' }
+  const date = new Date(`${slot.date}T00:00:00`)
+  const weekdayIndex = Number(slot.weekday) || ((date.getDay() + 6) % 7) + 1
+  const weekday = WEEKDAY_SHORT[weekdayIndex] || ''
+  return {
+    date: `${Number(year)}/${Number(month)}/${Number(day)}（周${weekday}）`,
+    period: FRAME_PERIOD[Number(slot.frame)] || ''
+  }
 }
 
 onMounted(() => {
@@ -105,34 +125,28 @@ onMounted(() => {
         :filter-method="filterHandler"
         sortable
       />
-      <el-table-column label="原始值班时间">
-        <template #default="scope">{{ formatScheduleLine(scope.row.original) }}</template>
-      </el-table-column>
-      <el-table-column label="补班时间">
-        <template #default="scope">{{ formatScheduleLine(scope.row.makeup) }}</template>
-      </el-table-column>
-      <el-table-column label="是否补班">
-        <template #default="scope">{{ scope.row.has_makeup ? '是' : '否' }}</template>
-      </el-table-column>
-      <el-table-column label="操作">
+      <el-table-column label="原始值班时间" min-width="180">
         <template #default="scope">
-          <el-button type="primary" plain @click="openDetail(scope.row)">详情</el-button>
+          <div class="slot-time">
+            <span>{{ slotLabel(scope.row.original).date }}</span>
+            <span>{{ slotLabel(scope.row.original).period }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="补班时间" min-width="180">
+        <template #default="scope">
+          <div class="slot-time">
+            <span>{{ slotLabel(scope.row.makeup).date }}</span>
+            <span>{{ slotLabel(scope.row.makeup).period }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="请假原因" min-width="160">
+        <template #default="scope">
+          <span>{{ reasonText(scope.row) }}</span>
         </template>
       </el-table-column>
     </el-table>
-    <el-drawer v-model="detailVisible" title="请假详情" size="40%">
-      <div v-if="detail" class="detail">
-        <p>姓名：{{ detail.name }}</p>
-        <p>部门：{{ detail.department }}</p>
-        <p>申请原因：{{ detail.reason }}</p>
-        <p v-if="detail.reason === '其他'">具体原因：{{ detail.reason_detail || '未填写' }}</p>
-        <p>申请时间：{{ formatDateTime(detail.apply_time) }}</p>
-        <p>原值班时间：{{ formatScheduleLine(detail.original) }}</p>
-        <p>原班次完整时间：{{ combineDateTime(detail.original?.date, detail.original?.start_time) }}</p>
-        <p>补班时间：{{ formatScheduleLine(detail.makeup) }}</p>
-        <p>补班完整时间：{{ combineDateTime(detail.makeup?.date, detail.makeup?.start_time) }}</p>
-      </div>
-    </el-drawer>
   </div>
 </template>
 
@@ -153,6 +167,11 @@ onMounted(() => {
 .table {
   width: 80%;
 }
+.slot-time {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.5;
+}
 .btn {
   font-size: 20px;
   padding: 8px 20px;
@@ -166,9 +185,6 @@ onMounted(() => {
 .btn:hover {
   color: white;
   background-color: #008aff;
-}
-.detail p {
-  line-height: 2;
 }
 @media only screen and (max-width: 768px) {
   .table {
