@@ -3,6 +3,7 @@ import { getFrameTime } from './dutyFrame.js'
 import { canApplyLeave, canApplyMakeup } from './leaveRule.js'
 
 const STORAGE_KEY = 'YoutholMockDutyState'
+const ROOM_ID = '302'
 function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
@@ -184,6 +185,7 @@ function migrateState(parsed) {
     parsed.semesterCatalog = catalog
   }
   parsed.semester = currentRangeFromCatalog(parsed.semesterCatalog)
+  if (!Array.isArray(parsed.borrows)) parsed.borrows = seedRoomBorrows()
   return parsed
 }
 
@@ -197,6 +199,7 @@ function emptyState() {
     alumni: seedAlumni(),
     slots: [],
     leaves: [],
+    borrows: seedRoomBorrows(),
     seq: 1
   }
 }
@@ -562,7 +565,6 @@ export function getDutyStatusInRange(payload) {
   return ok(clone(list))
 }
 
-
 export function getMemberUpcomingSlots(payload) {
   const today = todayKey()
   const list = state.slots
@@ -654,32 +656,203 @@ export function setDutyPauseState(payload) {
   return ok({ paused: state.paused })
 }
 
-export function bindCurrentUser(user) {
-  if (!user?.sdut_id || user.sdut_id === 'no id') return ok({ bound: false })
-  let member = findMember(user.sdut_id)
-  if (!member) {
-    member = {
-      sdut_id: String(user.sdut_id),
-      name: user.name || '当前用户',
-      college: user.college || '',
-      grade: user.grade || '',
-      department: user.department || '程序部',
-      identity: user.identity || '正式',
-      duty: [
-        { day: 1, frame: 1 },
-        { day: 3, frame: 3 }
-      ]
+
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function dateFromOffset(offset) {
+  const day = new Date()
+  day.setHours(12, 0, 0, 0)
+  day.setDate(day.getDate() + offset)
+  return day
+}
+
+function isoDate(day) {
+  return `${day.getFullYear()}-${pad2(day.getMonth() + 1)}-${pad2(day.getDate())}`
+}
+
+function clockToMinutes(value) {
+  const [hour, minute] = String(value || '').split(':').map((item) => Number(item))
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
+  return hour * 60 + minute
+}
+
+function currentMember() {
+  const token = ''
+  const sdutId = token.startsWith('mock:') ? token.slice(5) : ''
+  return findMember(sdutId)
+}
+
+function seedRoomBorrows() {
+  return [
+    {
+      id: 'room-seed-1',
+      room_id: ROOM_ID,
+      sdut_id: '22110301999',
+      name: '管理员',
+      department: '管理组',
+      people: '管理组',
+      borrow_date: isoDate(dateFromOffset(0)),
+      start_time: '10:00',
+      end_time: '11:30',
+      apply_time: `${isoDate(dateFromOffset(-1))} 09:00`,
+      cancel_time: ' ',
+      cancelled: false
+    },
+    {
+      id: 'room-seed-2',
+      room_id: ROOM_ID,
+      sdut_id: '23110301001',
+      name: '张三',
+      department: '程序部',
+      people: '程序部',
+      borrow_date: isoDate(dateFromOffset(2)),
+      start_time: '14:00',
+      end_time: '16:00',
+      apply_time: `${isoDate(dateFromOffset(-1))} 15:20`,
+      cancel_time: ' ',
+      cancelled: false
     }
-    state.members.push(member)
-    generateForMember(member, member.duty)
-    save()
-  } else {
-    member.name = user.name || member.name
-    member.department = user.department || member.department
-    member.identity = user.identity || member.identity
-    save()
+  ]
+}
+
+function recentRoomRows() {
+  const rows = []
+  for (let index = 0; index < 14; index += 1) {
+    const day = dateFromOffset(13 - index)
+    rows.push({
+      index,
+      label: `${pad2(day.getMonth() + 1)}月${pad2(day.getDate())}日`,
+      iso: isoDate(day)
+    })
   }
-  return ok({ bound: true, member: publicMember(member) })
+  return rows
+}
+
+function ensureBorrows() {
+  if (!Array.isArray(state.borrows)) state.borrows = []
+}
+
+export function getRoomBorrow() {
+  ensureBorrows()
+  const rows = recentRoomRows()
+  const indexByDate = new Map(rows.map((row) => [row.iso, row.index]))
+  const borrowTime = state.borrows
+    .filter((item) => !item.cancelled && indexByDate.has(item.borrow_date))
+    .map((item) => [
+      indexByDate.get(item.borrow_date),
+      `2023/07/08 ${item.start_time}`,
+      `2023/07/08 ${item.end_time}`,
+      item.people || item.department || item.name || '',
+      item.start_time,
+      item.end_time
+    ])
+  return ok({
+    recent14Day: {
+      dimensions: ['日期'],
+      data: rows.map((row) => [row.label, row.iso])
+    },
+    borrowTime: {
+      dimensions: ['借用日期', '开始时间', '结束时间', '借用人', '开始时间', '结束时间'],
+      data: borrowTime
+    }
+  })
+}
+
+export function applyRoomBorrow(payload = {}) {
+  ensureBorrows()
+  const borrowDate = payload.borrow_date
+  const start = payload.start_time
+  const end = payload.end_time
+  const roomId = payload.room_id || ROOM_ID
+  if (!borrowDate || !start || !end) return fail('请完善信息')
+  const todayKey = isoDate(new Date())
+  if (borrowDate < todayKey) return fail('不能选择已经过去的日期')
+  const startMinutes = clockToMinutes(start)
+  const endMinutes = clockToMinutes(end)
+  if (startMinutes == null || endMinutes == null || startMinutes >= endMinutes) {
+    return fail('结束时间必须晚于开始时间')
+  }
+  const conflict = state.borrows.some((item) => {
+    if (item.cancelled || item.room_id !== roomId || item.borrow_date !== borrowDate) return false
+    const itemStart = clockToMinutes(item.start_time)
+    const itemEnd = clockToMinutes(item.end_time)
+    return itemStart < endMinutes && startMinutes < itemEnd
+  })
+  if (conflict) return ok('busy')
+  const member = currentMember()
+  const now = new Date()
+  state.borrows.push({
+    id: nextId('room'),
+    room_id: roomId,
+    sdut_id: member?.sdut_id || '',
+    name: member?.name || '',
+    department: member?.department || payload.people || '',
+    people: payload.people || member?.department || member?.name || '',
+    borrow_date: borrowDate,
+    start_time: start,
+    end_time: end,
+    apply_time: `${isoDate(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
+    cancel_time: ' ',
+    cancelled: false
+  })
+  save()
+  return ok('success')
+}
+
+export function getRoomBorrowRecordInRange(payload = {}) {
+  ensureBorrows()
+  const start = dateOnly(payload.start_time)
+  const end = dateOnly(payload.end_time)
+  const roomId = String(payload.room_id || '').trim()
+  if (!start || !end) return fail('请选择时间')
+  const list = state.borrows
+    .filter((item) => {
+      if (item.cancelled || item.borrow_date < start || item.borrow_date > end) return false
+      return !roomId || item.room_id === roomId
+    })
+    .map((item) => ({
+      sdut_id: item.sdut_id,
+      room_id: item.room_id,
+      name: item.name,
+      department: item.department,
+      apply_time: item.apply_time,
+      borrow_date: item.borrow_date,
+      start_time: item.start_time,
+      end_time: item.end_time
+    }))
+  return ok(clone(list))
+}
+
+export function getSingleBorrowRecord(payload = {}) {
+  ensureBorrows()
+  const member = currentMember()
+  if (!member) return fail('未登录')
+  const roomId = payload.room_id || ROOM_ID
+  const list = state.borrows
+    .filter((item) => item.room_id === roomId && String(item.sdut_id) === String(member.sdut_id))
+    .map((item) => ({
+      id: item.id,
+      room_id: item.room_id,
+      apply_time: item.apply_time,
+      borrow_date: item.borrow_date,
+      start_time: item.start_time,
+      end_time: item.end_time,
+      cancel_time: item.cancel_time || ' '
+    }))
+  return ok(clone(list))
+}
+
+export function cancelRoomBorrow(payload = {}) {
+  ensureBorrows()
+  const item = state.borrows.find((borrow) => borrow.id === payload.id)
+  if (!item || item.cancelled) return ok('fail')
+  const now = new Date()
+  item.cancelled = true
+  item.cancel_time = `${isoDate(now)} ${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+  save()
+  return ok('success')
 }
 
 const MOCK_PASSWORD = 'youthol'
@@ -713,4 +886,32 @@ export function getYoutholerInfo() {
 
 export function checkDuty() {
   return ok({ duty_state: '未值班' })
+}
+
+export function bindCurrentUser(user) {
+  if (!user?.sdut_id || user.sdut_id === 'no id') return ok({ bound: false })
+  let member = findMember(user.sdut_id)
+  if (!member) {
+    member = {
+      sdut_id: String(user.sdut_id),
+      name: user.name || '当前用户',
+      college: user.college || '',
+      grade: user.grade || '',
+      department: user.department || '程序部',
+      identity: user.identity || '正式',
+      duty: [
+        { day: 1, frame: 1 },
+        { day: 3, frame: 3 }
+      ]
+    }
+    state.members.push(member)
+    generateForMember(member, member.duty)
+    save()
+  } else {
+    member.name = user.name || member.name
+    member.department = user.department || member.department
+    member.identity = user.identity || member.identity
+    save()
+  }
+  return ok({ bound: true, member: publicMember(member) })
 }

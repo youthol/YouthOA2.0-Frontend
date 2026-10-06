@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, defineExpose } from 'vue'
-import { http } from 'assets/js/http'
+import { getRoomBorrow } from 'assets/js/oaApi.js'
 import * as echarts from 'echarts'
 
 let _width = ref('100%')
@@ -9,8 +9,7 @@ let showData = ref()
 var roomBorrowData
 
 function GetRoomBorrow() {
-  http
-    .post('/GetRoomBorrow/', {})
+  getRoomBorrow()
     .then((res) => {
       roomBorrowData = res.data
     })
@@ -515,9 +514,7 @@ onMounted(() => {
 })
 
 const add = (date, start, end) => {
-  if (_option == null) {
-    console.log('1123s')
-  }
+  if (roomBorrowData == null || myChart == null) return
   let new_option = makeOption()
   for (let i = 0; i < roomBorrowData.borrowTime.data.length; i++) {
     if (roomBorrowData.borrowTime.data[i][3] == '当前选择') {
@@ -569,11 +566,9 @@ const add = (date, start, end) => {
 }
 
 const GetNewData = () => {
-  http
-    .post('/GetRoomBorrow/', {})
+  getRoomBorrow()
     .then((res) => {
       roomBorrowData = res.data
-      console.log(res.data)
     })
     .then(() => {
       _option = makeOption()

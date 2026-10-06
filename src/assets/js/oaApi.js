@@ -10,6 +10,7 @@ function real(path, payload, method = 'post') {
   return http.post(path, payload || {})
 }
 
+
 export function listFrom(res) {
   const body = res?.data
   if (Array.isArray(body)) return body
@@ -165,3 +166,38 @@ export function getYoutholerInfo() {
 export function checkDuty(payload) {
   return useMock ? mock.checkDuty(payload) : real('/CheckDuty/', payload)
 }
+
+export const ROOM_ID = '302'
+
+export function getRoomBorrow() {
+  return useMock ? mock.getRoomBorrow() : real('/GetRoomBorrow/', {})
+}
+
+function legacyBorrowIndex(isoDate) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const picked = new Date(`${isoDate}T00:00:00`)
+  const offset = Math.round((picked.getTime() - today.getTime()) / 86400000)
+  return 13 - offset
+}
+
+export function applyRoomBorrow(payload) {
+  if (useMock) return mock.applyRoomBorrow(payload)
+  return real('/ApplyRoomBorrow/', {
+    ...payload,
+    date: legacyBorrowIndex(payload?.borrow_date)
+  })
+}
+
+export function getRoomBorrowRecordInRange(payload) {
+  return useMock ? mock.getRoomBorrowRecordInRange(payload) : real('/GetRoomBorrowRecordInRange/', payload)
+}
+
+export function getSingleBorrowRecord(payload) {
+  return useMock ? mock.getSingleBorrowRecord(payload) : real('/GetSingleBorrowRecord/', payload)
+}
+
+export function cancelRoomBorrow(payload) {
+  return useMock ? mock.cancelRoomBorrow(payload) : real('/CancelRoomBorrow/', payload)
+}
+
