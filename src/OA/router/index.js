@@ -6,6 +6,7 @@ const adminRoutes = [
   '/MemberManage',
   '/MachineManage',
   '/RoomManage',
+  '/schedule-query',
   '/leave-record',
   '/pause-duty'
 ]
@@ -88,6 +89,13 @@ const router = createRouter({
       name: 'oa-leave-record',
       components: {
         MainComponment: () => import('../views/LeaveRecord.vue')
+      }
+    },
+    {
+      path: '/schedule-query',
+      name: 'oa-schedule-query',
+      components: {
+        MainComponment: () => import('../views/ScheduleQuery.vue')
       }
     },
     {

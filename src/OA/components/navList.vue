@@ -31,6 +31,10 @@ function close() {
       <div class="DutyRecord nav-item" @click="close">签到记录</div>
     </router-link>
 
+    <router-link to="/schedule-query" v-if="userStore.identity == '管理员'">
+      <div class="schedule-query nav-item" @click="close">排班查询</div>
+    </router-link>
+
     <router-link to="/RoomManage" v-if="userStore.identity == '管理员'">
       <div class="MachineManage nav-item" @click="close">房间借用记录</div>
     </router-link>

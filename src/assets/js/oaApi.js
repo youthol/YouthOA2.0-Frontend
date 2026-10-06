@@ -10,6 +10,24 @@ function real(path, payload, method = 'post') {
   return http.post(path, payload || {})
 }
 
+export function listFrom(res) {
+  const body = res?.data
+  if (Array.isArray(body)) return body
+  if (Array.isArray(body?.items)) return body.items
+  if (Array.isArray(body?.data)) return body.data
+  if (Array.isArray(body?.data?.items)) return body.data.items
+  if (Array.isArray(body?.list)) return body.list
+  return []
+}
+
+export function objectFrom(res) {
+  const body = res?.data
+  if (body && typeof body === 'object' && !Array.isArray(body) && body.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
+    return body.data
+  }
+  return body && typeof body === 'object' ? body : {}
+}
+
 export function bindCurrentUser(user) {
   if (!useMock) return Promise.resolve({ data: { bound: false } })
   return mock.bindCurrentUser(user)
