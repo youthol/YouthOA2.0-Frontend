@@ -2,11 +2,13 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { ensureSession, isAdminIdentity } from '../session.js'
 
 const adminRoutes = [
+  '/duty-status',
   '/DutyRecord',
   '/MemberManage',
   '/MachineManage',
   '/RoomManage',
   '/leave-record',
+  '/schedule-query',
   '/pause-duty'
 ]
 
@@ -46,6 +48,13 @@ const router = createRouter({
       name: 'oa-room',
       components: {
         MainComponment: () => import('../views/RoomPlan.vue')
+      }
+    },
+    {
+      path: '/duty-status',
+      name: 'oa-duty-status',
+      components: {
+        MainComponment: () => import('../views/DutyStatusQuery.vue')
       }
     },
     {
@@ -95,6 +104,13 @@ const router = createRouter({
       name: 'oa-pause-duty',
       components: {
         MainComponment: () => import('../views/PauseDuty.vue')
+      }
+    },
+    {
+      path: '/schedule-query',
+      name: 'oa-schedule-query',
+      components: {
+        MainComponment: () => import('../views/ScheduleQuery.vue')
       }
     },
     {

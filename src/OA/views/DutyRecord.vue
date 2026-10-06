@@ -1,6 +1,6 @@
 <script setup>
 import { http } from 'assets/js/http'
-import { getDutyStatusInRange, useMock } from 'assets/js/oaApi.js'
+import { getDutyStatusInRange, listFrom, useMock } from 'assets/js/oaApi.js'
 import { combineDateTime } from 'assets/js/datetime.js'
 import { formatScheduleLine } from 'assets/js/dutyFrame.js'
 import dutyStatusDots from '../components/dutyStatusDots.vue'
@@ -73,7 +73,7 @@ function getDutyInfo() {
     end_time: dateRange.value[1]
   })
     .then((res) => {
-      fillSlots(res.data || [])
+      fillSlots(listFrom(res))
       successAlert('共找到' + tableData.length + '条值班信息')
       loading.value = false
     })

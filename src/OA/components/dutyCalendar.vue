@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { toDateKey, weekdayName } from 'assets/js/datetime.js'
 import { CALENDAR_LEGEND, isCalendarVisible } from 'assets/js/dutyStatus.js'
 import dutyStatusDots from './dutyStatusDots.vue'
@@ -12,15 +12,6 @@ const props = defineProps({
 const view = ref('month')
 const cursor = ref(new Date())
 
-watch(
-  () => props.slots,
-  () => {
-    if (props.slots.length && view.value === 'month') {
-      const first = props.slots[0]
-      if (first?.date) cursor.value = new Date(`${first.date}T00:00:00`)
-    }
-  }
-)
 
 const visibleSlots = computed(() => props.slots.filter((slot) => isCalendarVisible(slot)))
 

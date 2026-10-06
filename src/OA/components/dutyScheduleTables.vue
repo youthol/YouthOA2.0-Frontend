@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import { combineDateTime } from 'assets/js/datetime.js'
 import { formatScheduleLine as formatSlot } from 'assets/js/dutyFrame.js'
-import { getMemberSemesterDuty, getDaySemesterDuty } from 'assets/js/oaApi.js'
+import { getMemberSemesterDuty, getDaySemesterDuty, listFrom } from 'assets/js/oaApi.js'
 import dutyStatusDots from './dutyStatusDots.vue'
 
 const memberKeyword = ref('')
@@ -21,7 +21,7 @@ function queryMember() {
   memberState.value = 'loading'
   getMemberSemesterDuty({ keyword: memberKeyword.value.trim() })
     .then((res) => {
-      memberRows.value = res.data || []
+      memberRows.value = listFrom(res)
       memberState.value = memberRows.value.length ? 'ok' : 'empty'
       if (memberRows.value.length) successAlert(`共找到 ${memberRows.value.length} 条排班`)
     })
@@ -39,7 +39,7 @@ function queryDay() {
   dayState.value = 'loading'
   getDaySemesterDuty({ date: dayValue.value })
     .then((res) => {
-      dayRows.value = res.data || []
+      dayRows.value = listFrom(res)
       dayState.value = dayRows.value.length ? 'ok' : 'empty'
       if (dayRows.value.length) successAlert(`当天共 ${dayRows.value.length} 人值班`)
     })
