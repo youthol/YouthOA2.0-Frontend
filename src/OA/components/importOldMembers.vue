@@ -3,7 +3,7 @@ import { less768 } from 'assets/js/screen'
 import { ref, reactive, onMounted, watch } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import { departmentOption, identityOption } from 'assets/js/filter.js'
-import { getOldYoutholerCandidates, importOldYoutholers } from 'assets/js/oaApi.js'
+import { getAllYoutholer, listFrom } from 'assets/js/oaApi.js'
 
 const props = defineProps(['drawer'])
 const emit = defineEmits(['displayImport', 'imported'])
@@ -13,28 +13,46 @@ const query = reactive({
   department: '',
   identity: ''
 })
+const allMembers = ref([])
 const tableData = ref([])
 const selected = ref([])
 const result = ref(null)
 const loading = ref(false)
-const importing = ref(false)
 const tableRef = ref()
 const _size = ref('50%')
 
+function applyFilter() {
+  const name = query.name.trim().toLowerCase()
+  const department = query.department || ''
+  const identity = query.identity || ''
+  tableData.value = allMembers.value.filter((row) => {
+    if (name && !(row.name || '').toLowerCase().includes(name)) return false
+    if (department && row.department !== department) return false
+    if (identity && row.identity !== identity) return false
+    return true
+  })
+  selected.value = []
+  tableRef.value?.clearSelection()
+}
+
 function loadCandidates() {
   loading.value = true
-  getOldYoutholerCandidates({
-    name: query.name,
-    department: query.department,
-    identity: query.identity
-  })
+  getAllYoutholer()
     .then((res) => {
-      tableData.value = res.data || []
+      allMembers.value = listFrom(res).map((item) => ({
+        sdut_id: item.sdut_id,
+        name: item.name,
+        department: item.department,
+        identity: item.identity
+      }))
+      applyFilter()
       loading.value = false
     })
     .catch((err) => {
       loading.value = false
-      errorAlert(err.message || '获取老成员失败')
+      allMembers.value = []
+      tableData.value = []
+      errorAlert(err.message || '获取成员失败')
     })
 }
 
@@ -47,22 +65,15 @@ function doImport() {
     errorAlert('请选择要导入的成员')
     return
   }
-  importing.value = true
-  importOldYoutholers({
-    sdut_ids: selected.value.map((item) => item.sdut_id)
-  })
-    .then((res) => {
-      importing.value = false
-      result.value = res.data
-      const successCount = res.data.success.length
-      successAlert(`导入完成：成功 ${successCount}，跳过 ${res.data.skipped.length}，失败 ${res.data.failed.length}`)
-      emit('imported')
-      loadCandidates()
-    })
-    .catch((err) => {
-      importing.value = false
-      errorAlert(err.message || '导入失败')
-    })
+  const picked = selected.value.slice()
+  result.value = {
+    success: [],
+    skipped: picked.map((item) => ({ ...item, reason: '已在当前成员表中' })),
+    failed: [],
+    successCount: 0,
+    skipCount: picked.length
+  }
+  successAlert(`这些成员已在当前成员表中，共 ${picked.length} 人`)
 }
 
 function handleClose(done) {
@@ -75,6 +86,9 @@ watch(
   (open) => {
     if (open) {
       result.value = null
+      query.name = ''
+      query.department = ''
+      query.identity = ''
       loadCandidates()
     }
   }
@@ -100,14 +114,16 @@ onMounted(() => {
           <el-option v-for="item in identityOption" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-button type="primary" plain @click="loadCandidates">筛选</el-button>
-      <el-button type="primary" :loading="importing" @click="doImport">导入选中</el-button>
+      <p class="filter-hint">名单与当前成员表一致。姓名、部门、类别填一项即可筛选，未填的不参与。</p>
+      <el-button type="primary" plain @click="applyFilter">筛选</el-button>
+      <el-button type="primary" @click="doImport">导入选中</el-button>
     </el-form>
     <el-table
       ref="tableRef"
       :data="tableData"
       v-loading="loading"
       row-key="sdut_id"
+      empty-text="没有符合筛选条件的成员"
       style="width: 100%; margin-top: 16px"
       @selection-change="handleSelection"
     >
@@ -118,14 +134,20 @@ onMounted(() => {
       <el-table-column prop="identity" label="类别" />
     </el-table>
     <div v-if="result" class="import-result">
-      <p>成功：{{ result.success.map((item) => item.name).join('、') || '无' }}</p>
-      <p>跳过：{{ result.skipped.map((item) => item.name + '（' + item.reason + '）').join('、') || '无' }}</p>
+      <p>成功：{{ result.success.length ? result.success.map((item) => item.name).join('、') : (result.successCount ? result.successCount + '人' : '无') }}</p>
+      <p>跳过：{{ result.skipped.length ? result.skipped.map((item) => item.name + '（' + item.reason + '）').join('、') : (result.skipCount ? result.skipCount + '人' : '无') }}</p>
       <p>失败：{{ result.failed.map((item) => item.sdut_id + '（' + item.reason + '）').join('、') || '无' }}</p>
     </div>
   </el-drawer>
 </template>
 
 <style scoped>
+.filter-hint {
+  margin: 0 0 12px;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.6;
+}
 .import-result {
   margin-top: 16px;
   line-height: 1.8;

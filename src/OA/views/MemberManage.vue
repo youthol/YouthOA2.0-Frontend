@@ -5,7 +5,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import modifyMemberInfo from '../components/modifyMemberInfo.vue'
 import addNewYoutholer from '../components/addNewYoutholer.vue'
 import importOldMembers from '../components/importOldMembers.vue'
-import dutyScheduleTables from '../components/dutyScheduleTables.vue'
 import { departmentFilter } from 'assets/js/filter.js'
 import { formatDutyOption } from 'assets/js/dutyFrame.js'
 import {
@@ -123,10 +122,27 @@ function patchCatalogItem(item) {
   })
 }
 
+function semesterListFrom(res) {
+  const body = res?.data
+  if (Array.isArray(body)) return body
+  if (Array.isArray(body?.list)) return body.list
+  if (Array.isArray(body?.data)) return body.data
+  if (Array.isArray(body?.data?.list)) return body.data.list
+  return []
+}
+
+function semesterItemFrom(res) {
+  const body = res?.data
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  if (body.id) return body
+  if (body.data && typeof body.data === 'object' && !Array.isArray(body.data) && body.data.id) return body.data
+  return null
+}
+
 function loadSemester() {
   getSemesterCatalog()
     .then((res) => {
-      const list = res.data?.list || res.data || []
+      const list = semesterListFrom(res)
       catalog.value = Array.isArray(list) ? list : []
       const current = catalog.value.find((item) => item.is_current) || catalog.value[0] || null
       currentSemesterId.value = current?.id || ''
@@ -143,7 +159,7 @@ function onSemesterChange(id) {
   setCurrentSemester({ semester_id: id })
     .then((res) => {
       switchingSemester.value = false
-      const item = res.data || catalog.value.find((row) => row.id === id)
+      const item = semesterItemFrom(res) || catalog.value.find((row) => row.id === id)
       patchCatalogItem(item)
       applySemesterDates(catalog.value.find((row) => row.id === id), false)
       ElMessage.info('可按实际情况修改')
@@ -173,12 +189,14 @@ function saveSemester() {
   savingSemester.value = true
   setSemesterDutyRange({
     semester_id: currentSemesterId.value,
+    semester_start: semester.start_date,
+    duty_end: semester.end_date,
     start_date: semester.start_date,
     end_date: semester.end_date
   })
     .then((res) => {
       savingSemester.value = false
-      const item = { ...(res.data || {}) }
+      const item = { ...(semesterItemFrom(res) || {}) }
       delete item.created
       patchCatalogItem(item)
       successAlert('学期值班区间已保存，将按新区间补齐班次，对全部值班成员生效')
@@ -345,8 +363,6 @@ onMounted(() => {
         </template>
       </el-table-column>
     </el-table>
-
-    <dutyScheduleTables />
 
     <modifyMemberInfo
       @displayMemberEdit="displayMemberEdit"
