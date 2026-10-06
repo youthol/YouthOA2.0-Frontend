@@ -11,8 +11,9 @@ export const useUserStore = defineStore('userStore', () => {
   const department = ref()
   const identity = ref()
   const position = ref()
+  const duty_paused = ref(false)
 
-  return { sdut_id, is_login, duty_state, duty_start_time, name, department, identity, position }
+  return { sdut_id, is_login, duty_state, duty_start_time, name, department, identity, position, duty_paused }
 })
 
 // export const useOAStore = defineStore('oaStore', () => {  

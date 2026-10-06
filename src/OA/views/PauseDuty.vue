@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
-import { getDutyPauseState, setDutyPauseState } from 'assets/js/oaApi.js'
+import { getDutyPauseState, pausedFrom, setDutyPauseState } from 'assets/js/oaApi.js'
 import { useUserStore } from 'store/store.js'
 
 const paused = ref(false)
@@ -12,7 +12,7 @@ function load() {
   loading.value = true
   getDutyPauseState()
     .then((res) => {
-      paused.value = !!res.data.paused
+      paused.value = pausedFrom(res)
       userStore.$patch({ duty_paused: paused.value })
       loading.value = false
     })
@@ -26,7 +26,7 @@ function change(value) {
   loading.value = true
   setDutyPauseState({ paused: value })
     .then((res) => {
-      paused.value = !!res.data.paused
+      paused.value = pausedFrom(res)
       userStore.$patch({ duty_paused: paused.value })
       loading.value = false
       successAlert(paused.value ? '已暂停值班，成员将无法签到' : '已恢复值班')

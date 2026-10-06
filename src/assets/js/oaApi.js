@@ -29,6 +29,13 @@ export function objectFrom(res) {
 }
 
 
+export function pausedFrom(res) {
+  const body = res?.data
+  if (body && typeof body.paused === 'boolean') return body.paused
+  if (body?.data && typeof body.data.paused === 'boolean') return body.data.paused
+  return false
+}
+
 export function bindCurrentUser(user) {
   if (!useMock) return Promise.resolve({ data: { bound: false } })
   return mock.bindCurrentUser(user)

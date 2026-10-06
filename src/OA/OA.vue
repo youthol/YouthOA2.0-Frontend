@@ -1,55 +1,26 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { RouterView } from 'vue-router'
-import { http } from 'assets/js/http.js' //配置了基本的设置
 import { less768 } from 'assets/js/screen.js' //配置了基本的设置
 import { useUserStore } from 'store/store.js'
 import { errorAlert } from 'assets/js/message.js'
-import { bindCurrentUser, getDutyPauseState } from 'assets/js/oaApi.js'
+import { getDutyPauseState, pausedFrom, checkDuty as fetchCheckDuty } from 'assets/js/oaApi.js'
+import { ensureSession } from './session.js'
 
 import navList from './components/navList.vue'
 
 let userStore = useUserStore()
 
-const verifySignIn = new Promise((resolve, reject) => {
-  http
-    .post('/GetYoutholerInfo/', {})
-    .then((res) => {
-      console.log(res)
-
-      // 在这里设置 Pinia状态？
-      userStore.$patch({
-        sdut_id: res.data.sdut_id,
-        is_login: true,
-        name: res.data.name,
-        department: res.data.department,
-        identity: res.data.identity,
-        position: res.data.position
-      })
-      bindCurrentUser(res.data)
-      // store.$patch({ sdut_id: res.data.sdut_id })
-      console.log('已登录')
-      resolve()
-    })
-    .catch(function (error) {
-      console.log(error)
-      userStore.$patch({ sdut_id: 'no id', is_login: false })
-      reject()
-    })
-})
-
-
 function loadPauseState() {
   getDutyPauseState()
     .then((res) => {
-      userStore.$patch({ duty_paused: !!res.data.paused })
+      userStore.$patch({ duty_paused: pausedFrom(res) })
     })
     .catch(() => {})
 }
 
 function checkDuty() {
-  http
-    .post('/CheckDuty/', {
+  fetchCheckDuty({
       sdut_id: userStore.sdut_id
     })
     .then((res) => {
@@ -83,20 +54,12 @@ onMounted(() => {
   if (less768()) {
     _size.value = '90%'
   }
-  if (userStore.is_login == true) {
-    //先检查 pinia
-    loadPauseState()
-    checkDuty()
-    return
-  }
-  verifySignIn
+  ensureSession()
     .then(() => {
       loadPauseState()
       checkDuty()
     })
-    .catch(() => {
-      window.location.href = import.meta.env.BASE_URL
-    })
+    .catch(() => {})
 })
 </script>
 
@@ -122,6 +85,7 @@ onMounted(() => {
             <div class="user-info-detail">
               <div class="user-name">{{ userStore.name }}</div>
               <div class="department">{{ userStore.department }}</div>
+              <div class="department">{{ userStore.identity }}</div>
             </div>
           </div>
           <navList> </navList>
