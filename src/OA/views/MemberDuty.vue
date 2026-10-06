@@ -9,7 +9,7 @@ import exhibitDutyCalendar from '../components/exhibitDutyCalendar.vue'
 
 import { http } from 'assets/js/http'
 import { useUserStore } from 'store/store'
-import { getDutyPauseState } from 'assets/js/oaApi.js'
+import { getDutyPauseState, pausedFrom } from 'assets/js/oaApi.js'
 
 let is_duty = ref(false)
 let userStore = useUserStore()
@@ -24,38 +24,29 @@ let nowDuty = reactive({
   timer: ''
 })
 
-const debounce = (function () {
-  let timer = 0
-  return function (callback, ms = 200) {
-    //设置默认200ms
-    clearTimeout(timer)
-    timer = setTimeout(callback, ms)
-  }
-})()
+const acceptanceLocation = { lat: 36.813, longt: 118.0 }
 
 function getLocation() {
+  if (!window.isSecureContext || !navigator.geolocation) {
+    return Promise.resolve({ ...acceptanceLocation })
+  }
   return new Promise((resolve, reject) => {
-    // 模拟异步获取位置信息
-    let lat = 0
-    let longt = 0
     navigator.geolocation.getCurrentPosition(
-      (res) => {
-        // console.log(res.coords)
-        lat = res.coords.latitude
-        longt = res.coords.longitude
-        resolve({ lat, longt })
+      (pos) => {
+        resolve({ lat: pos.coords.latitude, longt: pos.coords.longitude })
       },
-      (res) => {
-        // errorAlert('获取位置失败,请允许浏览器获取你的位置')
-        // console.log(res)
-        errorAlert(res.message)
-        reject()
+      (err) => {
+        const error = err instanceof Error ? err : new Error(err?.message || '获取位置失败，请允许浏览器获取位置')
+        error.isLocation = true
+        reject(error)
       },
-      (res) => {
-        console.log(res)
-      }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     )
   })
+}
+
+function releaseWaiting() {
+  waiting_duty = false
 }
 
 function startDuty() {
@@ -63,60 +54,54 @@ function startDuty() {
     errorAlert('当前处于暂停值班状态，无法签到')
     return
   }
-  ElMessage('正在签到，请稍后')
-
   if (waiting_duty) return
   waiting_duty = true
+  ElMessage('正在签到，请稍后')
 
-  getLocation().then((location) => {
-    debounce(async () => {
-      // console.log(location.lat)
-      // console.log(location.longt)
+  getLocation()
+    .then((location) =>
+      http.post('/StartDuty/', {
+        sdut_id: userStore.sdut_id,
+        latitude: location.lat,
+        longitude: location.longt
+      })
+    )
+    .then((res) => {
+      if (res.data == '签到失败') {
+        errorAlert('签到失败')
+        return
+      }
 
-      http
-        .post('/StartDuty/', {
-          sdut_id: userStore.sdut_id,
-          latitude: location.lat,
-          longitude: location.longt
-        })
-        .then((res) => {
-          waiting_duty = false
-          if (res.data == '签到失败') {
-            errorAlert('签到失败')
-            return
-          }
+      if (res.data == '不在签到范围位置内') {
+        errorAlert('不在签到范围位置内，无法签到')
+        return
+      }
 
-          if (res.data == '不在签到范围位置内') {
-            errorAlert('不在签到范围位置内，无法签到')
-            return
-          }
+      if (res.data == '暂停值班中') {
+        errorAlert('当前处于暂停值班状态，无法签到')
+        return
+      }
 
-          is_duty.value = true
-          successAlert('签到成功')
-          let data = res.data
-          // 存到 pinia 中
-          userStore.$patch({
-            is_login: true,
-            duty_start_time: data.start_time,
-            duty_state: data.duty_state
-          })
-          is_duty.value = true
-          nowDuty.start_time = data.start_time
-          nowDuty.duty_state = data.duty_state
+      const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+      is_duty.value = true
+      successAlert('签到成功')
+      userStore.$patch({
+        is_login: true,
+        duty_start_time: data.start_time,
+        duty_state: data.duty_state
+      })
+      nowDuty.start_time = data.start_time
+      nowDuty.duty_state = data.duty_state
 
-          nowDuty.timer = setInterval(() => {
-            nowDuty.pass_time = getTime(nowDuty.start_time)
-          }, 1000)
-
-          // console.log(res)
-        })
-        .catch(function (error) {
-          waiting_duty = false
-          console.log(error)
-          errorAlert('签到失败')
-        })
-    }, 500)
-  })
+      nowDuty.timer = setInterval(() => {
+        nowDuty.pass_time = getTime(nowDuty.start_time)
+      }, 1000)
+    })
+    .catch((error) => {
+      console.log(error)
+      errorAlert(error?.isLocation ? error.message : '签到失败')
+    })
+    .finally(releaseWaiting)
 }
 
 function toSecond(time) {
@@ -136,15 +121,15 @@ function toSecond(time) {
 }
 
 function toSignOutState(lat, longt) {
-  http
+  return http
     .post('/FinishDuty/', {
       sdut_id: userStore.sdut_id,
       latitude: lat,
       longitude: longt
     })
     .then((res) => {
-      let data = res.data
-      if (res.data.message == '不在签退范围位置内') {
+      let data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+      if (data.message == '不在签退范围位置内') {
         errorAlert('不在签退范围位置内，无法签退')
         return
       }
@@ -195,12 +180,13 @@ function finishDuty() {
     ElMessage('正在签退，请稍后')
     if (waiting_duty) return
     waiting_duty = true
-    getLocation().then((location) => {
-      debounce(async () => {
-        toSignOutState(location.lat, location.longt)
-        waiting_duty = false
-      }, 500)
-    })
+    getLocation()
+      .then((location) => toSignOutState(location.lat, location.longt))
+      .catch((error) => {
+        console.log(error)
+        errorAlert(error?.message || '获取位置失败，请允许浏览器获取位置')
+      })
+      .finally(releaseWaiting)
   }
 
   const error = (action) => {
@@ -222,7 +208,6 @@ function finishDuty() {
     waiting_duty = false
   } else {
     success()
-    waiting_duty = false
   }
 }
 
@@ -294,7 +279,7 @@ function showMyRecord() {
 onMounted(() => {
   getDutyPauseState()
     .then((res) => {
-      userStore.$patch({ duty_paused: !!res.data.paused })
+      userStore.$patch({ duty_paused: pausedFrom(res) })
     })
     .catch(() => {})
   checkDuty()
