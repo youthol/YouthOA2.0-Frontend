@@ -4,6 +4,7 @@ import { onMounted } from 'vue'
 import { useUserStore } from './store/store.js'
 import YoutholTitle from './components/YoutholTitle.vue'
 import { http } from './assets/js/http.js' //配置了基本的设置
+import { getToken, clearToken } from './assets/js/token.js'
 
 function toLogin() {
   window.location.href = `${import.meta.env.BASE_URL}login/`
@@ -16,7 +17,7 @@ function toOA() {
 let store = useUserStore()
 
 function verifySignIn() {
-  const accessToken = localStorage.getItem('YoutholAccessToken')
+  const accessToken = getToken()
 
   if (!accessToken) {
     store.$patch({ sdut_id: 'no id', is_login: false })
@@ -46,7 +47,7 @@ function verifySignIn() {
 }
 
 function logout() {
-  localStorage.removeItem('YoutholAccessToken')
+  clearToken()
   store.$patch({ sdut_id: '', is_login: false })
 }
 

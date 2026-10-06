@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { useUserStore } from 'store/store.js'
+import { ensureSession, isAdminIdentity } from '../session.js'
 
 const adminRoutes = [
   '/DutyRecord',
@@ -107,10 +107,21 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
-router.beforeEach((to) => {
-  if (!adminRoutes.includes(to.path)) return true
-  return useUserStore().identity === '管理员'
+router.beforeEach(async (to) => {
+  let store
+  try {
+    store = await ensureSession()
+  } catch {
+    return true
+  }
+  const admin = isAdminIdentity(store.identity, store.position)
+  if (admin && to.path === '/') {
+    return { path: '/MemberManage', replace: true }
+  }
+  if (adminRoutes.includes(to.path) && !admin) {
+    return { path: '/duty', replace: true }
+  }
+  return true
 })
 
 //   if (to.matched.some((record) => record.meta.requiresAuth) && !isAuthenticated) {

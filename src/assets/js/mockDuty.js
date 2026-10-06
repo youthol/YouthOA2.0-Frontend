@@ -664,3 +664,36 @@ export function bindCurrentUser(user) {
   }
   return ok({ bound: true, member: publicMember(member) })
 }
+
+const MOCK_PASSWORD = 'youthol'
+
+export function signIn(payload) {
+  const username = String(payload?.username || '').trim()
+  const password = payload?.password || ''
+  const member = findMember(username)
+  if (!member || password !== MOCK_PASSWORD) {
+    return ok({ SignState: '账号或密码错误' })
+  }
+  return ok({
+    SignState: '登录成功',
+    access_token: `mock:${member.sdut_id}`
+  })
+}
+
+export function getYoutholerInfo() {
+  const token = ''
+  const sdutId = token.startsWith('mock:') ? token.slice(5) : ''
+  const member = findMember(sdutId)
+  if (!member) return fail('未登录')
+  return ok({
+    sdut_id: member.sdut_id,
+    name: member.name,
+    department: member.department,
+    identity: member.identity,
+    position: ''
+  })
+}
+
+export function checkDuty() {
+  return ok({ duty_state: '未值班' })
+}

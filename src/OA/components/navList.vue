@@ -1,10 +1,15 @@
 <script setup>
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useUserStore } from 'store/store.js'
+import { isAdminIdentity, resetSession } from '../session.js'
+import { clearToken } from 'assets/js/token.js'
 const emit = defineEmits(['displayHeaderNav'])
 let userStore = useUserStore()
+const isAdmin = computed(() => isAdminIdentity(userStore.identity, userStore.position))
 function Logout() {
-  localStorage.removeItem('YoutholAccessToken')
+  resetSession()
+  clearToken()
   userStore.$patch({ sdut_id: '', is_login: false })
   window.location.href = import.meta.env.BASE_URL
 }
@@ -23,19 +28,21 @@ function close() {
       <div class="duty nav-item" @click="close">值班</div>
     </router-link>
 
-    <router-link to="/room" v-if="userStore.identity == '管理员'">
+    <router-link to="/room" v-if="isAdmin">
       <div class="room nav-item" @click="close">房间借用</div>
     </router-link>
 
-    <router-link to="/DutyRecord" v-if="userStore.identity == '管理员'">
+    <router-link to="/DutyRecord" v-if="isAdmin">
       <div class="DutyRecord nav-item" @click="close">签到记录</div>
     </router-link>
 
-    <router-link to="/RoomManage" v-if="userStore.identity == '管理员'">
+
+
+    <router-link to="/RoomManage" v-if="isAdmin">
       <div class="MachineManage nav-item" @click="close">房间借用记录</div>
     </router-link>
 
-    <router-link to="/MemberManage" v-if="userStore.identity == '管理员'">
+    <router-link to="/MemberManage" v-if="isAdmin">
       <div class="MemberManage nav-item" @click="close">成员管理</div>
     </router-link>
 
@@ -43,11 +50,11 @@ function close() {
       <div class="leave-adjust nav-item" @click="close">请假调班</div>
     </router-link>
 
-    <router-link to="/leave-record" v-if="userStore.identity == '管理员'">
+    <router-link to="/leave-record" v-if="isAdmin">
       <div class="leave-record nav-item" @click="close">请假记录</div>
     </router-link>
 
-    <router-link to="/pause-duty" v-if="userStore.identity == '管理员'">
+    <router-link to="/pause-duty" v-if="isAdmin">
       <div class="pause-duty nav-item" @click="close">暂停值班</div>
     </router-link>
 
