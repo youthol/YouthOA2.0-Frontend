@@ -1,6 +1,6 @@
 import { getFrameTime } from './dutyFrame.js'
 
-const HALF_HOUR_MS = 30 * 60 * 1000
+const MIN_LEAD_MS = 15 * 60 * 1000
 const BEIJING_TZ = 'Asia/Shanghai'
 
 export function beijingTodayKey(now = new Date()) {
@@ -40,8 +40,8 @@ export function canApplyLeave(slot) {
   if (!slot.date || !slot.start_time) return { ok: false, reason: '原值班时间无效' }
   const start = new Date(`${slot.date}T${slot.start_time}:00+08:00`).getTime()
   if (Number.isNaN(start)) return { ok: false, reason: '原值班时间无效' }
-  if (Date.now() >= start - HALF_HOUR_MS) {
-    return { ok: false, reason: '值班开始前半小时内不可申请请假' }
+  if (Date.now() > start - MIN_LEAD_MS) {
+    return { ok: false, reason: '距离值班开始不足15分钟，不能申请' }
   }
   return { ok: true }
 }
@@ -53,6 +53,27 @@ export function canApplyMakeup({ makeup_date, makeup_frame, original_date, origi
   }
   if (isMakeupStartPassed(makeup_date, makeup_frame, now)) {
     return { ok: false, reason: '不能补已经过去的班' }
+  }
+  return { ok: true }
+}
+
+export function canCancelLeave(record, now = Date.now()) {
+  const original = record?.original
+  if (!original?.date || !original?.start_time) return { ok: false, reason: '原值班时间无效' }
+  const start = new Date(`${original.date}T${original.start_time}:00+08:00`).getTime()
+  if (Number.isNaN(start)) return { ok: false, reason: '原值班时间无效' }
+  if (now > start - MIN_LEAD_MS) {
+    return { ok: false, reason: '离原值班开始不到15分钟，不能撤销' }
+  }
+  const makeup = record?.makeup
+  if (makeup?.date && makeup?.start_time) {
+    const makeupStart = new Date(`${makeup.date}T${makeup.start_time}:00+08:00`).getTime()
+    if (!Number.isNaN(makeupStart) && now >= makeupStart) {
+      return { ok: false, reason: '补班已经开始，不能撤销' }
+    }
+    if (!Number.isNaN(makeupStart) && now > makeupStart - MIN_LEAD_MS) {
+      return { ok: false, reason: '离补班开始不到15分钟，不能撤销' }
+    }
   }
   return { ok: true }
 }

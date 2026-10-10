@@ -1,18 +1,41 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
-import { combineDateTime } from 'assets/js/datetime.js'
-import { WEEKDAY_LABEL, formatScheduleLine as formatSlot } from 'assets/js/dutyFrame.js'
+import { formatScheduleLine as formatSlot } from 'assets/js/dutyFrame.js'
 import { getDutyStatusInRange, getDaySemesterDuty, getMemberSemesterDuty, getSemesterDutyRange, listFrom, objectFrom } from 'assets/js/oaApi.js'
+import { dutyStatusGroup, dutyStatusGroupText } from 'assets/js/dutyStatus.js'
 import dutyStatusDots from '../components/dutyStatusDots.vue'
 
 const personKeyword = ref('')
-const exportDate = ref('')
+const queryDate = ref('')
 const resultRows = ref([])
 const resultState = ref('loading')
 const resultMessage = ref('')
 const emptyText = ref('暂无排班')
-const exporting = ref(false)
+const statusGroup = ref('all')
+const statusFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'done', label: '值班' },
+  { key: 'missed', label: '未值班' },
+  { key: 'irregular', label: '不规范' }
+]
+const groupCounts = computed(() => {
+  const counts = { done: 0, missed: 0, irregular: 0, pending: 0 }
+  resultRows.value.forEach((row) => {
+    const group = dutyStatusGroup(row)
+    counts[group] = (counts[group] || 0) + 1
+  })
+  return counts
+})
+const filteredRows = computed(() => {
+  if (statusGroup.value === 'all') return resultRows.value
+  return resultRows.value.filter((row) => dutyStatusGroup(row) === statusGroup.value)
+})
+const tableEmptyText = computed(() => {
+  if (resultState.value === 'loading') return '查询中'
+  if (statusGroup.value !== 'all' && resultRows.value.length && !filteredRows.value.length) return '没有符合该状态的记录'
+  return emptyText.value
+})
 let resultToken = 0
 
 function beginResult(kind) {
@@ -94,41 +117,6 @@ function loadSemesterSchedule() {
     })
 }
 
-const FRAME_PERIOD = {
-  1: '一二节（8：00~9：40）',
-  2: '三四节（10：05~11：45）',
-  3: '五六节（14：00~15：40）',
-  4: '七八节（16：05~17：45）',
-  5: '九十节（19：00~20：40）'
-}
-
-function dutyDateLabel(row) {
-  const [year, month, day] = String(row.date || '').split('-')
-  if (!year || !month || !day) return row.date || ''
-  const date = new Date(`${row.date}T00:00:00`)
-  const weekday = WEEKDAY_LABEL[row.weekday] || WEEKDAY_LABEL[(((date.getDay() + 6) % 7) + 1)] || ''
-  return `${Number(year)}/${Number(month)}/${Number(day)}（${weekday}）`
-}
-
-function periodLabel(row) {
-  return FRAME_PERIOD[Number(row.frame)] || ''
-}
-
-function escapeCsv(value) {
-  const text = String(value ?? '')
-  return `"${text.replaceAll('"', '""')}"`
-}
-
-function downloadCsv(filename, content) {
-  const blob = new Blob([`\ufeff${content}`], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 function rowsFromDay(res, fallbackDate) {
   const info = objectFrom(res)
   const date = info.date || fallbackDate || ''
@@ -139,14 +127,14 @@ function rowsFromDay(res, fallbackDate) {
 }
 
 function loadDayRows() {
-  if (!exportDate.value) {
+  if (!queryDate.value) {
     errorAlert('请选择日期')
     return Promise.resolve(null)
   }
   const token = beginResult('day')
-  return getDaySemesterDuty({ date: exportDate.value })
+  return getDaySemesterDuty({ date: queryDate.value })
     .then((res) => {
-      const list = rowsFromDay(res, exportDate.value)
+      const list = rowsFromDay(res, queryDate.value)
       if (!isCurrent(token)) return null
       resultRows.value = list
       resultState.value = list.length ? 'ok' : 'empty'
@@ -174,35 +162,6 @@ function queryDay() {
   })
 }
 
-function exportDayRoster() {
-  if (!exportDate.value) {
-    errorAlert('请选择导出日期')
-    return
-  }
-  exporting.value = true
-  loadDayRows()
-    .then((rows) => {
-      if (!rows || !rows.length) {
-        if (rows && !rows.length) errorAlert('当天没有值班人员')
-        return
-      }
-      const header = ['姓名', '学号', '部门', '值班日期', '节次']
-      const body = rows.map((row) => [
-        row.name,
-        row.sdut_id,
-        row.department,
-        dutyDateLabel(row),
-        periodLabel(row)
-      ])
-      const csv = [header, ...body].map((item) => item.map(escapeCsv).join(',')).join('\r\n')
-      downloadCsv(`值班名单-${exportDate.value}.csv`, csv)
-      successAlert(`已导出 ${rows.length} 名值班人员`)
-    })
-    .finally(() => {
-      exporting.value = false
-    })
-}
-
 onMounted(loadSemesterSchedule)
 </script>
 
@@ -212,13 +171,23 @@ onMounted(loadSemesterSchedule)
     <div class="toolbar query-bar">
       <el-input v-model="personKeyword" placeholder="按人查询：姓名或学号" clearable @keyup.enter="queryPerson" />
       <div class="btn" @click="queryPerson">按人查询</div>
-      <el-date-picker v-model="exportDate" type="date" value-format="YYYY-MM-DD" placeholder="按日查询" />
-      <div class="btn" @click="queryDay">按日查询</div>
-      <div class="btn" :class="{ disabled: exporting }" @click="exporting ? null : exportDayRoster()">
-        {{ exporting ? '导出中...' : '导出当天名单' }}
+      <el-date-picker v-model="queryDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" />
+      <div class="btn" @click="queryDay">查看名单</div>
+    </div>
+    <div class="status-bar">
+      <span class="status-label">值班状态</span>
+      <div
+        v-for="item in statusFilters"
+        :key="item.key"
+        class="btn"
+        :class="{ active: statusGroup === item.key }"
+        @click="statusGroup = item.key"
+      >
+        {{ item.label }}<span v-if="item.key !== 'all'" class="count">{{ groupCounts[item.key] || 0 }}</span>
       </div>
     </div>
-    <el-table v-loading="resultState === 'loading'" :data="resultRows" :empty-text="emptyText" class="table">
+    <p class="hint">不规范包括迟到、早退、未签退。还没到的班次只在「全部」里，不算未值班。</p>
+    <el-table v-loading="resultState === 'loading'" :data="filteredRows" :empty-text="tableEmptyText" class="table">
       <el-table-column prop="date" label="日期" width="120" />
       <el-table-column prop="name" label="姓名" />
       <el-table-column prop="sdut_id" label="学号" />
@@ -226,8 +195,8 @@ onMounted(loadSemesterSchedule)
       <el-table-column label="值班时间">
         <template #default="scope">{{ formatSlot(scope.row) }}</template>
       </el-table-column>
-      <el-table-column label="完整时间">
-        <template #default="scope">{{ combineDateTime(scope.row.date, scope.row.start_time) }}</template>
+      <el-table-column label="类别" min-width="140">
+        <template #default="scope">{{ dutyStatusGroupText(scope.row) }}</template>
       </el-table-column>
       <el-table-column label="状态" min-width="160">
         <template #default="scope">
@@ -277,9 +246,30 @@ onMounted(loadSemesterSchedule)
   color: #fff;
   background: #008aff;
 }
-.btn.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.btn.active {
+  color: #fff;
+  background: #008aff;
+}
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+.status-label {
+  color: #008aff;
+  font-weight: 700;
+}
+.count {
+  margin-left: 6px;
+}
+.hint {
+  margin: 0 0 16px;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
 }
 .state-text {
   text-align: center;

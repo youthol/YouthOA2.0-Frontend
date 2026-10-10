@@ -9,7 +9,8 @@ const adminRoutes = [
   '/RoomManage',
   '/leave-record',
   '/schedule-query',
-  '/pause-duty'
+  '/pause-duty',
+  '/room'
 ]
 
 const router = createRouter({

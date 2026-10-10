@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import ExhibitRoomBorrow from '../components/exhibitRoomBorrow.vue'
 import { useUserStore } from 'store/store.js'
 import { errorAlert, successAlert } from 'assets/js/message.js'
@@ -100,6 +100,66 @@ function loadRoomBorrow() {
     })
 }
 
+
+function todayKey() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+function currentMinutes() {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function clockToMinutes(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value || '')
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function formatClock(total) {
+  const hour = Math.floor(total / 60)
+  const minute = total % 60
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+const nowMinutes = ref(currentMinutes())
+
+function refreshNow() {
+  nowMinutes.value = currentMinutes()
+}
+
+const startFloor = computed(() => {
+  if (borrowInfo.dateValue !== todayKey()) return ''
+  let floor = ''
+  for (let minutes = 8 * 60; minutes <= 22 * 60; minutes += 30) {
+    if (minutes < nowMinutes.value) floor = formatClock(minutes)
+    else break
+  }
+  return floor
+})
+
+function startIsPast() {
+  if (borrowInfo.dateValue !== todayKey()) return false
+  const start = clockToMinutes(borrowInfo.startTime)
+  if (start == null) return false
+  return start < nowMinutes.value
+}
+
+function clearPastStart() {
+  refreshNow()
+  if (startIsPast()) borrowInfo.startTime = null
+}
+
+watch(
+  () => borrowInfo.dateValue,
+  () => {
+    clearPastStart()
+  }
+)
+
 let applying = false
 function applyRoom() {
   if (!hasValue(borrowInfo.dateValue) || !hasValue(borrowInfo.startTime) || !hasValue(borrowInfo.endTime)) {
@@ -108,6 +168,11 @@ function applyRoom() {
   }
   if (!isSelectableBorrowDate(borrowInfo.dateValue)) {
     errorAlert('不能选择已经过去的日期')
+    return
+  }
+  clearPastStart()
+  if (startIsPast() || !hasValue(borrowInfo.startTime)) {
+    errorAlert('开始时间不能早于当前时间')
     return
   }
   if (applying) {
@@ -179,12 +244,14 @@ function openMyBorrowRecord() {
       <el-form-item prop="startTime" label="借用开始时间" class="form-item">
         <el-time-select
           v-model="borrowInfo.startTime"
+          :min-time="startFloor"
           :max-time="borrowInfo.endTime"
           class="mr-4"
           placeholder="Start time"
           start="08:00"
           step="00:30"
           end="22:00"
+          @focus="clearPastStart"
         />
       </el-form-item>
       <el-form-item prop="endTime" label="借用结束时间" class="form-item">

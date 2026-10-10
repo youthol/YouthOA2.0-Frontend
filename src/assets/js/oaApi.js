@@ -36,7 +36,7 @@ const LEAVE_ERROR_TEXT = {
   FORBIDDEN: '没有权限',
   MEMBER_NOT_FOUND: '成员不存在',
   SLOT_NOT_FOUND: '请选择原值班时间',
-  LEAVE_TOO_LATE: '值班开始前半小时内不可申请请假',
+  LEAVE_TOO_LATE: '距离值班开始不足15分钟，不能申请',
   MAKEUP_REQUIRED: '请选择补班时间',
   REASON_REQUIRED: '请选择申请原因',
   REASON_DETAIL_REQUIRED: '请填写具体原因',
@@ -46,7 +46,13 @@ const LEAVE_ERROR_TEXT = {
   INVALID_FRAME: '补班节次无效',
   INVALID_DATE: '请选择时间',
   INVALID_RANGE: '截止日期不能早于开始日期',
-  INVALID_REASON: '申请原因无效'
+  INVALID_REASON: '申请原因无效',
+  RECORD_NOT_FOUND: '找不到这条请假记录',
+  CANCEL_TOO_LATE: '离原值班开始不到15分钟，不能撤销',
+  MAKEUP_TOO_LATE: '离补班开始不到15分钟，不能撤销',
+  MAKEUP_ALREADY_STARTED: '补班已经开始，不能撤销',
+  MAKEUP_IN_USE: '这次补班已再次请假，不能撤销',
+  CANCEL_FAILED: '撤销失败，请稍后重试'
 }
 
 function explainLeaveError(err) {
@@ -73,8 +79,21 @@ export function getSemesterCatalog() {
   return useMock ? mock.getSemesterCatalog() : real('/GetSemesterCatalog/', {})
 }
 
+const SEMESTER_ERROR_TEXT = {
+  FORBIDDEN: '没有权限',
+  SEMESTER_NOT_CONFIGURED: '请选择学年学期',
+  INVALID_DATE: '日期无效',
+  INVALID_RANGE: '截止日期不能早于开始日期',
+  SEMESTER_DATES_EXISTS: '这个学期的起止日期没有变化',
+  SEMESTER_DATE_OVERLAP: '这个日期和另一个学期重叠，请改开',
+  ACADEMIC_YEAR_INVALID: '学年须为连续两年，例如 2027-2028',
+  ACADEMIC_YEAR_EXISTS: '这个学年已经存在',
+  NO_MATCHED_DATE: '当前学期没有可生成的值班'
+}
+
 export function setCurrentSemester(payload) {
-  return useMock ? mock.setCurrentSemester(payload) : real('/SetCurrentSemester/', payload)
+  const request = useMock ? mock.setCurrentSemester(payload) : real('/SetCurrentSemester/', payload)
+  return request.catch(explainMappedError(SEMESTER_ERROR_TEXT))
 }
 
 export function getSemesterDutyRange() {
@@ -82,19 +101,75 @@ export function getSemesterDutyRange() {
 }
 
 export function setSemesterDutyRange(payload) {
-  return useMock ? mock.setSemesterDutyRange(payload) : real('/SetSemesterDutyRange/', payload)
+  const request = useMock ? mock.setSemesterDutyRange(payload) : real('/SetSemesterDutyRange/', payload)
+  return request.catch(explainMappedError(SEMESTER_ERROR_TEXT))
+}
+
+export function generateSemesterDuty(payload) {
+  const request = useMock ? mock.generateSemesterDuty(payload) : real('/GenerateSemesterDuty/', payload)
+  return request.catch(explainMappedError(SEMESTER_ERROR_TEXT))
+}
+
+export function addAcademicYear(payload) {
+  const request = useMock ? mock.addAcademicYear(payload) : real('/AddAcademicYear/', payload)
+  return request.catch(explainMappedError(SEMESTER_ERROR_TEXT))
+}
+
+const MEMBER_ERROR_TEXT = {
+  INVALID_DEPARTMENT: '请选择已有部门',
+  FORBIDDEN: '没有权限',
+  MEMBER_EXISTS: '该学号已存在',
+  MEMBER_NOT_FOUND: '成员不存在',
+  SEMESTER_NOT_CONFIGURED: '当前学期未配置'
+}
+
+const DEPARTMENT_ERROR_TEXT = {
+  FORBIDDEN: '没有权限',
+  DEPARTMENT_REQUIRED: '请输入部门名称',
+  DEPARTMENT_TOO_LONG: '部门名称不能超过20个字',
+  DEPARTMENT_EXISTS: '这个部门已经有了',
+  DEPARTMENT_NOT_FOUND: '部门不存在',
+  DEPARTMENT_IN_USE: '这个部门还有成员，不能删除'
+}
+
+function explainMappedError(map) {
+  return (err) => {
+    const code = err?.response?.data?.error
+    if (typeof code === 'string' && map[code]) {
+      const error = new Error(map[code])
+      error.code = code
+      return Promise.reject(error)
+    }
+    return Promise.reject(err)
+  }
 }
 
 export function getAllYoutholer() {
   return useMock ? mock.getAllYoutholer() : real('/GetAllYoutholer/', {})
 }
 
+export function getDepartments() {
+  return useMock ? mock.getDepartments() : real('/GetDepartmentList/', {})
+}
+
+export function addDepartment(name) {
+  const request = useMock ? mock.addDepartment({ name }) : real('/AddDepartment/', { name })
+  return request.catch(explainMappedError(DEPARTMENT_ERROR_TEXT))
+}
+
+export function deleteDepartment(name) {
+  const request = useMock ? mock.deleteDepartment({ name }) : real('/DeleteDepartment/', { name })
+  return request.catch(explainMappedError(DEPARTMENT_ERROR_TEXT))
+}
+
 export function addOneYoutholer(payload) {
-  return useMock ? mock.addOneYoutholer(payload) : real('/AddOneYoutholer/', payload)
+  const request = useMock ? mock.addOneYoutholer(payload) : real('/AddOneYoutholer/', payload)
+  return request.catch(explainMappedError(MEMBER_ERROR_TEXT))
 }
 
 export function modifySingleYoutholInfo(payload) {
-  return useMock ? mock.modifySingleYoutholInfo(payload) : real('/ModifySingleYoutholInfo/', payload)
+  const request = useMock ? mock.modifySingleYoutholInfo(payload) : real('/ModifySingleYoutholInfo/', payload)
+  return request.catch(explainMappedError(MEMBER_ERROR_TEXT))
 }
 
 export function deleteYoutholer(payload) {
@@ -143,6 +218,14 @@ export function applyLeaveAdjust(payload) {
 
 export function getLeaveRecords(payload) {
   return useMock ? mock.getLeaveRecords(payload) : real('/GetLeaveRecords/', payload).catch(explainLeaveError)
+}
+
+export function getMyLeaveRecords(payload) {
+  return useMock ? mock.getMyLeaveRecords(payload) : real('/GetMyLeaveRecords/', payload).catch(explainLeaveError)
+}
+
+export function cancelLeaveAdjust(payload) {
+  return useMock ? mock.cancelLeaveAdjust(payload) : real('/CancelLeaveAdjust/', payload).catch(explainLeaveError)
 }
 
 export function getDutyPauseState() {

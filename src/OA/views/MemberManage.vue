@@ -1,18 +1,25 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import modifyMemberInfo from '../components/modifyMemberInfo.vue'
 import addNewYoutholer from '../components/addNewYoutholer.vue'
 import importOldMembers from '../components/importOldMembers.vue'
-import { departmentFilter } from 'assets/js/filter.js'
+import { departmentFilter, replaceDepartments } from 'assets/js/filter.js'
 import { formatDutyOption } from 'assets/js/dutyFrame.js'
 import {
   getAllYoutholer as fetchAllYoutholer,
   getSemesterCatalog,
   setCurrentSemester,
   setSemesterDutyRange,
-  initPassword
+  generateSemesterDuty,
+  addAcademicYear,
+  objectFrom,
+  initPassword,
+  getDepartments,
+  addDepartment,
+  deleteDepartment,
+  listFrom
 } from 'assets/js/oaApi.js'
 
 let tableRef = ref()
@@ -21,15 +28,30 @@ let modifyDrawer = ref(false)
 let addMemberDrawer = ref(false)
 let importDrawer = ref(false)
 let loading = ref(true)
+const activeTab = ref('members')
+const departmentName = ref('')
+const departmentLoading = ref(false)
+const departmentSaving = ref(false)
 let savingSemester = ref(false)
 let switchingSemester = ref(false)
+const addYearVisible = ref(false)
+const addingYear = ref(false)
+const yearForm = reactive({
+  academic_year: '',
+  term1_start: '',
+  term1_end: '',
+  term2_start: '',
+  term2_end: ''
+})
 const catalog = ref([])
 const currentSemesterId = ref('')
 let semester = reactive({
   start_date: '',
   end_date: ''
 })
-const currentSemester = computed(() => catalog.value.find((item) => item.id === currentSemesterId.value) || null)
+const currentSemester = computed(
+  () => catalog.value.find((item) => String(item.id) === String(currentSemesterId.value)) || null
+)
 const datesDirty = computed(() => {
   const item = currentSemester.value
   if (!item || !semester.start_date || !semester.end_date) return false
@@ -57,42 +79,45 @@ const formatter = (data) => {
     .join('；')
 }
 const filterHandler = (value, row, column) => {
-  const property = column['property']
-  return row[property] === value
+  const property = column?.property || column?.['property']
+  return String(row?.[property] ?? '').trim() === String(value ?? '').trim()
 }
-const filterDutyHandler = (value, row, column) => {
-  const property = column['property']
-  let duty = row[property] || []
-  for (let i = 0; i < duty.length; i++) {
-    if (duty[i].day == value) {
-      return true
-    }
-  }
-  return false
+const filterDutyHandler = (value, row) => {
+  const duty = Array.isArray(row?.duty) ? row.duty : []
+  return duty.some((item) => String(item?.day) === String(value))
+}
+const departmentColumnFilters = computed(() =>
+  departmentFilter.map((item) => ({ text: item.text, value: item.value }))
+)
+function clearMemberFilters() {
+  nextTick(() => {
+    tableRef.value?.clearFilter()
+  })
 }
 
 function getAllYoutholer() {
   loading.value = true
-  fetchAllYoutholer()
+  return fetchAllYoutholer()
     .then((res) => {
-      let data = res.data || []
-      tableData.length = 0
-      for (let i = 0; i < data.length; i++) {
+      const data = listFrom(res)
+      tableData.splice(0, tableData.length)
+      data.forEach((item) => {
         tableData.push({
-          sdut_id: data[i].sdut_id,
-          unique_id: data[i].sdut_id + data[i].department,
-          name: data[i].name,
-          department: data[i].department,
-          identity: data[i].identity,
-          duty: data[i].duty
+          sdut_id: item.sdut_id,
+          unique_id: String(item.sdut_id) + String(item.department || ''),
+          name: item.name,
+          department: item.department,
+          identity: item.identity,
+          duty: Array.isArray(item.duty) ? item.duty : []
         })
-      }
+      })
       loading.value = false
     })
     .catch(function (error) {
       console.log(error)
-      errorAlert('获取成员信息失败')
       loading.value = false
+      errorAlert('获取成员信息失败')
+      return false
     })
 }
 
@@ -111,15 +136,23 @@ function applySemesterDates(item, useActual) {
   semester.end_date = item.default_end || ''
 }
 
-function patchCatalogItem(item) {
-  if (!item?.id) return
-  const index = catalog.value.findIndex((row) => row.id === item.id)
+function patchCatalogItem(item, makeCurrent = false) {
+  if (item?.id === undefined || item?.id === null || item?.id === '') return
+  const index = catalog.value.findIndex((row) => String(row.id) === String(item.id))
   if (index >= 0) {
-    catalog.value[index] = { ...catalog.value[index], ...item }
+    const previous = catalog.value[index]
+    catalog.value[index] = {
+      ...previous,
+      ...item,
+      id: previous.id,
+      is_current: makeCurrent ? true : previous.is_current
+    }
   }
-  catalog.value.forEach((row) => {
-    row.is_current = row.id === item.id
-  })
+  if (makeCurrent) {
+    catalog.value.forEach((row) => {
+      row.is_current = String(row.id) === String(item.id)
+    })
+  }
 }
 
 function semesterListFrom(res) {
@@ -154,21 +187,32 @@ function loadSemester() {
 }
 
 function onSemesterChange(id) {
-  if (!id) return
+  if (!id || switchingSemester.value) return
+  const previousId = catalog.value.find((item) => item.is_current)?.id || ''
   switchingSemester.value = true
   setCurrentSemester({ semester_id: id })
     .then((res) => {
-      switchingSemester.value = false
-      const item = semesterItemFrom(res) || catalog.value.find((row) => row.id === id)
-      patchCatalogItem(item)
-      applySemesterDates(catalog.value.find((row) => row.id === id), false)
+      const item = semesterItemFrom(res) || catalog.value.find((row) => String(row.id) === String(id))
+      patchCatalogItem(item || { id }, true)
+      applySemesterDates(catalog.value.find((row) => String(row.id) === String(id)), false)
+      tableData.splice(0, tableData.length)
+      clearMemberFilters()
+      return getAllYoutholer()
+    })
+    .then((loaded) => {
+      if (loaded === false) return
       ElMessage.info('可按实际情况修改')
     })
     .catch((err) => {
-      switchingSemester.value = false
-      const current = catalog.value.find((item) => item.is_current)
-      currentSemesterId.value = current?.id || ''
+      const switched = catalog.value.some((row) => row.is_current && String(row.id) === String(id))
+      if (!switched) {
+        currentSemesterId.value = previousId
+        clearMemberFilters()
+      }
       errorAlert(err.message || '切换学期失败')
+    })
+    .finally(() => {
+      switchingSemester.value = false
     })
 }
 
@@ -194,16 +238,168 @@ function saveSemester() {
     start_date: semester.start_date,
     end_date: semester.end_date
   })
+    .catch((err) => {
+      if (err.code === 'SEMESTER_DATES_EXISTS') return null
+      throw err
+    })
+    .then((res) => {
+      if (res) {
+        const item = { ...(semesterItemFrom(res) || {}) }
+        delete item.created
+        delete item.need_generate
+        patchCatalogItem(item, false)
+      }
+      return generateSemesterDuty({ semester_id: currentSemesterId.value })
+    })
     .then((res) => {
       savingSemester.value = false
-      const item = { ...(semesterItemFrom(res) || {}) }
-      delete item.created
-      patchCatalogItem(item)
-      successAlert('学期值班区间已保存，将按新区间补齐班次，对全部值班成员生效')
+      const created = Number(objectFrom(res).created_count || 0)
+      successAlert(created > 0 ? `学期已保存，新生成 ${created} 条值班` : '学期已保存，没有需要新生成的班次')
     })
     .catch((err) => {
       savingSemester.value = false
       errorAlert(err.message || '保存失败')
+    })
+}
+
+
+function parseAcademicYear(value) {
+  const match = /^(\d{4})-(\d{4})$/.exec(String(value || '').trim())
+  if (!match) return ''
+  const start = Number(match[1])
+  const end = Number(match[2])
+  if (end !== start + 1) return ''
+  return `${start}-${end}`
+}
+
+function shiftDateByYear(value, years = 1) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '')
+  if (!match) return ''
+  const year = Number(match[1]) + years
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const lastDay = new Date(year, month, 0).getDate()
+  const safeDay = Math.min(day, lastDay)
+  return `${year}-${String(month).padStart(2, '0')}-${String(safeDay).padStart(2, '0')}`
+}
+
+function latestAcademicYear() {
+  let best = ''
+  let bestStart = -1
+  catalog.value.forEach((item) => {
+    const year = parseAcademicYear(item.academic_year)
+    if (!year) return
+    const start = Number(year.slice(0, 4))
+    if (start > bestStart) {
+      bestStart = start
+      best = year
+    }
+  })
+  return best
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return startA <= endB && startB <= endA
+}
+
+function effectiveRange(item) {
+  const start = item?.semester_start || item?.default_start || ''
+  const end = item?.duty_end || item?.default_end || ''
+  if (!start || !end) return null
+  return [start, end]
+}
+
+function sortCatalog() {
+  catalog.value.sort((a, b) => {
+    const yearCompare = String(a.academic_year || '').localeCompare(String(b.academic_year || ''))
+    if (yearCompare) return yearCompare
+    return Number(a.term) - Number(b.term)
+  })
+}
+
+function openAddYear() {
+  const latest = latestAcademicYear()
+  const nextStart = latest ? Number(latest.slice(0, 4)) + 1 : new Date().getFullYear()
+  const nextYear = `${nextStart}-${nextStart + 1}`
+  const terms = catalog.value.filter((item) => item.academic_year === latest)
+  const term1 = terms.find((item) => Number(item.term) === 1)
+  const term2 = terms.find((item) => Number(item.term) === 2)
+  yearForm.academic_year = nextYear
+  yearForm.term1_start = shiftDateByYear(term1?.default_start)
+  yearForm.term1_end = shiftDateByYear(term1?.default_end)
+  yearForm.term2_start = shiftDateByYear(term2?.default_start)
+  yearForm.term2_end = shiftDateByYear(term2?.default_end)
+  if (!yearForm.term1_start || !yearForm.term1_end || !yearForm.term2_start || !yearForm.term2_end) {
+    yearForm.term1_start = yearForm.term1_start || `${nextStart}-08-29`
+    yearForm.term1_end = yearForm.term1_end || `${nextStart + 1}-01-17`
+    yearForm.term2_start = yearForm.term2_start || `${nextStart + 1}-02-27`
+    yearForm.term2_end = yearForm.term2_end || `${nextStart + 1}-07-18`
+  }
+  addYearVisible.value = true
+}
+
+function validateAcademicYearForm() {
+  const year = parseAcademicYear(yearForm.academic_year)
+  if (!year) return '学年须为连续两年，例如 2027-2028'
+  if (catalog.value.some((item) => item.academic_year === year)) return '这个学年已经存在'
+  const dates = [yearForm.term1_start, yearForm.term1_end, yearForm.term2_start, yearForm.term2_end]
+  if (dates.some((value) => !/^\d{4}-\d{2}-\d{2}$/.test(value || ''))) return '请选择四个学期日期'
+  if (yearForm.term1_end < yearForm.term1_start || yearForm.term2_end < yearForm.term2_start) {
+    return '截止日期不能早于开始日期'
+  }
+  if (!(yearForm.term1_end < yearForm.term2_start)) return '第一学期结束日必须早于第二学期开始日'
+  const ranges = [
+    [yearForm.term1_start, yearForm.term1_end],
+    [yearForm.term2_start, yearForm.term2_end]
+  ]
+  const overlapped = catalog.value.some((item) => {
+    const other = effectiveRange(item)
+    if (!other) return false
+    return ranges.some(([start, end]) => rangesOverlap(start, end, other[0], other[1]))
+  })
+  if (overlapped) return '这个日期和另一个学期重叠，请改开'
+  return ''
+}
+
+function createdYearItems(res) {
+  const body = objectFrom(res)
+  if (Array.isArray(body?.items)) return body.items
+  return []
+}
+
+function submitAcademicYear() {
+  if (addingYear.value) return
+  const message = validateAcademicYearForm()
+  if (message) {
+    errorAlert(message)
+    return
+  }
+  const selectedId = currentSemesterId.value
+  addingYear.value = true
+  addAcademicYear({
+    academic_year: parseAcademicYear(yearForm.academic_year),
+    term1_start: yearForm.term1_start,
+    term1_end: yearForm.term1_end,
+    term2_start: yearForm.term2_start,
+    term2_end: yearForm.term2_end
+  })
+    .then((res) => {
+      const items = createdYearItems(res)
+      items.forEach((item) => {
+        const index = catalog.value.findIndex((row) => String(row.id) === String(item.id))
+        if (index >= 0) catalog.value[index] = { ...catalog.value[index], ...item, is_current: false }
+        else catalog.value.push({ ...item, is_current: false })
+      })
+      sortCatalog()
+      currentSemesterId.value = selectedId
+      addYearVisible.value = false
+      successAlert('已新增学年，当前学期没有切换')
+    })
+    .catch((err) => {
+      errorAlert(err.message || '新增学年失败')
+    })
+    .finally(() => {
+      addingYear.value = false
     })
 }
 
@@ -270,13 +466,79 @@ const resetPassword = (row) => {
     })
 }
 
+function departmentRows() {
+  return departmentFilter.map((item) => ({ name: item.value }))
+}
+
+function loadDepartments() {
+  departmentLoading.value = true
+  getDepartments()
+    .then((res) => {
+      const names = listFrom(res)
+        .map((item) => (typeof item === 'string' ? item : item?.name))
+        .filter(Boolean)
+      if (names.length) replaceDepartments(names)
+      departmentLoading.value = false
+    })
+    .catch((err) => {
+      departmentLoading.value = false
+      errorAlert(err.message || '获取部门失败')
+    })
+}
+
+function submitDepartment() {
+  const name = departmentName.value.trim()
+  if (departmentSaving.value) return
+  if (!name) {
+    errorAlert('请输入部门名称')
+    return
+  }
+  if (name.length > 20) {
+    errorAlert('部门名称不能超过20个字')
+    return
+  }
+  departmentSaving.value = true
+  addDepartment(name)
+    .then(() => {
+      departmentName.value = ''
+      successAlert('已添加部门')
+      return loadDepartments()
+    })
+    .catch((err) => {
+      errorAlert(err.message || '添加部门失败')
+    })
+    .finally(() => {
+      departmentSaving.value = false
+    })
+}
+
+function removeDepartment(name) {
+  ElMessageBox.confirm(`确定删除部门「${name}」？删除后不能再选这个部门。`, '删除部门', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
+    .then(() => deleteDepartment(name))
+    .then(() => {
+      successAlert('已删除部门')
+      return loadDepartments()
+    })
+    .catch((err) => {
+      if (err === 'cancel' || err === 'close') return
+      errorAlert(err?.message || '删除部门失败')
+    })
+}
+
 onMounted(() => {
   loadSemester()
   getAllYoutholer()
+  loadDepartments()
 })
 </script>
 <template>
   <div class="main-layout">
+    <el-tabs v-model="activeTab" class="member-tabs">
+    <el-tab-pane label="成员" name="members">
     <div class="options">
       <div class="semester-box">
         <el-select
@@ -288,6 +550,7 @@ onMounted(() => {
         >
           <el-option v-for="item in catalog" :key="item.id" :label="item.label" :value="item.id" />
         </el-select>
+        <div class="add-btn" @click="openAddYear">新增学年</div>
         <el-date-picker
           v-model="semester.start_date"
           type="date"
@@ -321,14 +584,17 @@ onMounted(() => {
       <el-table-column align="center" prop="name" label="姓名" sortable />
       <el-table-column align="center" prop="sdut_id" label="学号" sortable />
       <el-table-column
+        :key="departmentColumnFilters.map((item) => item.value).join('|')"
+        column-key="department"
         align="center"
         prop="department"
         label="部门"
-        :filters="departmentFilter"
+        :filters="departmentColumnFilters"
         :filter-method="filterHandler"
         sortable
       />
       <el-table-column
+        column-key="identity"
         align="center"
         prop="identity"
         label="类别"
@@ -341,6 +607,7 @@ onMounted(() => {
         sortable
       />
       <el-table-column
+        column-key="duty"
         align="center"
         prop="duty"
         label="值班安排"
@@ -378,11 +645,54 @@ onMounted(() => {
     >
     </addNewYoutholer>
 
+    </el-tab-pane>
+    <el-tab-pane label="部门" name="departments">
+      <p class="dept-hint">可以新增部门，也可以删除没有成员的部门。删除后，添加和编辑成员时不能再选它。</p>
+      <div class="dept-bar">
+        <el-input v-model="departmentName" class="dept-input" maxlength="20" placeholder="输入新部门名称" clearable @keyup.enter="submitDepartment" />
+        <div class="add-btn" :class="{ disabled: departmentSaving }" @click="submitDepartment">添加部门</div>
+      </div>
+      <el-table v-loading="departmentLoading" :data="departmentRows()" class="table" empty-text="还没有部门">
+        <el-table-column prop="name" label="部门" />
+        <el-table-column label="操作" width="140" align="center">
+          <template #default="scope">
+            <el-button type="danger" plain @click="removeDepartment(scope.row.name)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-tab-pane>
+    </el-tabs>
+
     <importOldMembers
       :drawer="importDrawer"
       @displayImport="(val) => (importDrawer = val)"
       @imported="getAllYoutholer"
     />
+
+  
+    <el-dialog v-model="addYearVisible" title="新增学年" width="560px" :close-on-click-modal="false">
+      <p class="semester-hint">一次新增这一学年的两个学期。不会切换当前学期，也不会改动已有成员、值班和请假记录。</p>
+      <div class="year-form">
+        <span>学年</span>
+        <el-input v-model="yearForm.academic_year" maxlength="9" placeholder="例如 2027-2028" />
+        <span>第一学期</span>
+        <div class="year-dates">
+          <el-date-picker v-model="yearForm.term1_start" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
+          <el-date-picker v-model="yearForm.term1_end" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+        </div>
+        <span>第二学期</span>
+        <div class="year-dates">
+          <el-date-picker v-model="yearForm.term2_start" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
+          <el-date-picker v-model="yearForm.term2_end" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-actions">
+          <div class="add-btn" :class="{ disabled: addingYear }" @click="addYearVisible = false">取消</div>
+          <div class="add-btn" :class="{ disabled: addingYear }" @click="submitAcademicYear">确认新增</div>
+        </div>
+      </template>
+    </el-dialog>
 
   </div>
 </template>
@@ -395,17 +705,20 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
 }
-.table {
+.member-tabs {
   width: 80%;
 }
+.table {
+  width: 100%;
+}
 .semester-hint {
-  width: 80%;
+  width: 100%;
   margin: 0 0 12px;
   color: #666;
   font-size: 13px;
 }
 .options {
-  width: 80%;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -423,6 +736,21 @@ onMounted(() => {
 .semester-select {
   width: 240px;
 }
+.year-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.year-dates,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.dialog-actions {
+  justify-content: flex-end;
+}
 .dirty-tag {
   font-size: 13px;
   color: #d48806;
@@ -433,6 +761,21 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.dept-hint {
+  margin: 0 0 12px;
+  color: #666;
+  font-size: 13px;
+}
+.dept-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.dept-input {
+  width: 240px;
+}
 .add-btn {
   font-size: 18px;
   margin: 10px 0;
@@ -458,9 +801,7 @@ onMounted(() => {
   background-color: white;
 }
 @media only screen and (max-width: 768px) {
-  .table,
-  .options,
-  .semester-hint {
+  .member-tabs {
     width: 90%;
   }
   .options {

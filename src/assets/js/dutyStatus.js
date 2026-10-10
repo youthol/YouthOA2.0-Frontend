@@ -77,3 +77,44 @@ export function getDotStyle(meta, size) {
     boxSizing: 'border-box'
   }
 }
+
+const MISSED_STATUS = new Set(['absent', 'leave_absent', 'adjust_absent'])
+const DONE_STATUS = new Set(['normal', 'leave_normal', 'adjust_normal'])
+const PENDING_STATUS = new Set(['upcoming', 'makeup_upcoming'])
+const IRREGULAR_FLAGS = new Set(['late', 'early', 'no_checkout'])
+
+export const DUTY_STATUS_GROUP_LABEL = {
+  done: '值班',
+  missed: '未值班',
+  irregular: '不规范',
+  pending: '未到值班日'
+}
+
+function resolvedStatus(slot = {}) {
+  const status = slot.status || 'upcoming'
+  if (slot.source !== 'makeup') return status
+  if (status === 'upcoming' || status === 'makeup_upcoming') return 'makeup_upcoming'
+  if (status === 'adjust_normal') return 'adjust_normal'
+  if (status === 'adjust_absent') return 'adjust_absent'
+  if (status === 'absent' || status === 'leave_absent') return 'leave_absent'
+  return 'leave_normal'
+}
+
+export function dutyStatusGroup(slot = {}) {
+  const status = resolvedStatus(slot)
+  if (MISSED_STATUS.has(status)) return 'missed'
+  const flags = Array.isArray(slot.flags) ? slot.flags : []
+  if (flags.some((flag) => IRREGULAR_FLAGS.has(flag))) return 'irregular'
+  if (DONE_STATUS.has(status)) return 'done'
+  if (PENDING_STATUS.has(status)) return 'pending'
+  return 'pending'
+}
+
+export function dutyStatusGroupText(slot = {}) {
+  const group = dutyStatusGroup(slot)
+  if (group !== 'irregular') return DUTY_STATUS_GROUP_LABEL[group]
+  const names = (Array.isArray(slot.flags) ? slot.flags : [])
+    .filter((flag) => IRREGULAR_FLAGS.has(flag))
+    .map((flag) => FLAG_LABEL[flag] || flag)
+  return names.length ? `不规范（${names.join('、')}）` : '不规范'
+}

@@ -1,3 +1,5 @@
+import { reactive } from 'vue'
+
 // export const departmentOption = [
 //   { label: '程序部', value: '程序部' },
 //   { label: '媒体中心', value: '媒体中心' },
@@ -10,18 +12,34 @@
 //   { label: '管理组', value: '管理组' }
 // ]
 
-export const departmentOption = [
-  { label: '程序部', value: '程序部' },
-  { label: '媒体中心', value: '媒体中心' },
-  { label: '共建中心', value: '共建中心' },
-  { label: '美工部', value: '美工部' },
-  { label: '综合部', value: '综合部' },
-  { label: '闪客部', value: '闪客部' },
-  { label: '视频推广部', value: '视频推广部' },
-  { label: '视频编辑部', value: '视频编辑部' },
-  { label: '摄影部', value: '摄影部' },
-  { label: '管理组', value: '管理组' }
+export const DEFAULT_DEPARTMENTS = [
+  '程序部',
+  '媒体中心',
+  '共建中心',
+  '美工部',
+  '综合部',
+  '闪客部',
+  '视频推广部',
+  '视频编辑部',
+  '摄影部',
+  '管理组'
 ]
+
+export const departmentOption = reactive(DEFAULT_DEPARTMENTS.map((name) => ({ label: name, value: name })))
+
+export function replaceDepartments(names) {
+  const clean = []
+  const seen = new Set()
+  for (const raw of names || []) {
+    const name = String(raw ?? '').trim()
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    clean.push(name)
+  }
+  const next = clean.length ? clean : DEFAULT_DEPARTMENTS
+  departmentOption.splice(0, departmentOption.length, ...next.map((name) => ({ label: name, value: name })))
+  departmentFilter.splice(0, departmentFilter.length, ...next.map((name) => ({ text: name, value: name })))
+}
 
 export const identityOption = [
   { label: '试用', value: '试用' },
@@ -60,18 +78,7 @@ export const dutyFrameOption = [
 //   { text: '管理组', value: '管理组' }
 // ]
 
-export const departmentFilter = [
-  { text: '程序部', value: '程序部' },
-  { text: '媒体中心', value: '媒体中心' },
-  { text: '共建中心', value: '共建中心' },
-  { text: '美工部', value: '美工部' },
-  { text: '综合部', value: '综合部' },
-  { text: '视频编辑部', value: '视频编辑部' },
-  { text: '视频推广部', value: '视频推广部' },
-  { text: '闪客部', value: '闪客部' },
-  { text: '摄影部', value: '摄影部' },
-  { text: '管理组', value: '管理组' }
-]
+export const departmentFilter = reactive(DEFAULT_DEPARTMENTS.map((name) => ({ text: name, value: name })))
 
 export const stateFilter = [
   { text: '正在值班', value: '正在值班' },

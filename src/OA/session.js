@@ -4,10 +4,8 @@ import { useUserStore } from 'store/store.js'
 
 let pending = null
 
-export function isAdminIdentity(identity, position) {
-  const role = String(identity || '').trim()
-  const job = String(position || '').trim()
-  return role === '管理员' || job === '管理员'
+export function isAdminIdentity(identity) {
+  return String(identity || '').trim() === '管理员'
 }
 
 export function applyYoutholer(payload) {
