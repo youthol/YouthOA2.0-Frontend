@@ -1,26 +1,70 @@
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
-import { http } from 'assets/js/http'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import ExhibitRoomBorrow from '../components/exhibitRoomBorrow.vue'
 import { useUserStore } from 'store/store.js'
 import { errorAlert, successAlert } from 'assets/js/message.js'
 import exhibitMyBorrowRecord from '../components/exhibitMyBorrowRecord.vue'
+import { ROOM_ID, applyRoomBorrow, getRoomBorrow } from 'assets/js/oaApi.js'
 
 let userStore = useUserStore()
 
 let borrowInfo = reactive({
-  dateValue: '',
-  startTime: '',
-  endTime: ''
+  dateValue: null,
+  startTime: null,
+  endTime: null
 })
 let chartRef = ref()
 let borrowFormRef = ref()
+let roomBorrowData
+
+function hasValue(value) {
+  return value != null && String(value).length > 0
+}
+
+function startOfDay(date) {
+  const copy = new Date(date)
+  copy.setHours(0, 0, 0, 0)
+  return copy
+}
+
+function disableBorrowDate(date) {
+  return startOfDay(date) < startOfDay(new Date())
+}
+
+function isSelectableBorrowDate(isoDate) {
+  if (!hasValue(isoDate)) return false
+  const picked = new Date(`${isoDate}T00:00:00`)
+  return !Number.isNaN(picked.getTime()) && picked >= startOfDay(new Date())
+}
+
+function rowIndexForDate(isoDate) {
+  const rows = roomBorrowData?.recent14Day?.data
+  if (!Array.isArray(rows)) return -1
+  const found = rows.findIndex((row) => row[1] === isoDate)
+  if (found >= 0) return found
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const picked = new Date(`${isoDate}T00:00:00`)
+  const offset = Math.round((picked.getTime() - today.getTime()) / 86400000)
+  if (offset < 0 || offset > 13 || rows.length !== 14) return -1
+  return 13 - offset
+}
+
+function previewBorrow() {
+  if (!hasValue(borrowInfo.dateValue) || !hasValue(borrowInfo.startTime) || !hasValue(borrowInfo.endTime)) {
+    return
+  }
+  const index = rowIndexForDate(borrowInfo.dateValue)
+  if (index < 0 || chartRef.value == null) return
+  try {
+    chartRef.value.add(index, borrowInfo.startTime, borrowInfo.endTime)
+  } catch (err) {
+    console.log(err)
+  }
+}
 
 const verifyBorrowInfo = (rule, value, callback) => {
-  if (borrowInfo.dateValue != '' && borrowInfo.startTime != '' && borrowInfo.endTime != '') {
-    console.log('test')
-    chartRef.value.add(borrowInfo.dateValue, borrowInfo.startTime, borrowInfo.endTime)
-  }
+  previewBorrow()
   callback()
 }
 const rules = reactive({
@@ -45,26 +89,90 @@ const rules = reactive({
   ]
 })
 
-let roomBorrowData
-let dateRange = ref([])
-function GetRoomBorrow() {
-  http
-    .post('/GetRoomBorrow/', {})
+function loadRoomBorrow() {
+  getRoomBorrow()
     .then((res) => {
       roomBorrowData = res.data
-      for (let i = roomBorrowData['recent14Day']['data'].length - 1; i >= 0; i--) {
-        dateRange.value.push({ label: roomBorrowData['recent14Day']['data'][i][0], value: i })
-      }
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('获取可借日期失败')
     })
 }
 
+
+function todayKey() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+function currentMinutes() {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function clockToMinutes(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value || '')
+  if (!match) return null
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function formatClock(total) {
+  const hour = Math.floor(total / 60)
+  const minute = total % 60
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+const nowMinutes = ref(currentMinutes())
+
+function refreshNow() {
+  nowMinutes.value = currentMinutes()
+}
+
+const startFloor = computed(() => {
+  if (borrowInfo.dateValue !== todayKey()) return ''
+  let floor = ''
+  for (let minutes = 8 * 60; minutes <= 22 * 60; minutes += 30) {
+    if (minutes < nowMinutes.value) floor = formatClock(minutes)
+    else break
+  }
+  return floor
+})
+
+function startIsPast() {
+  if (borrowInfo.dateValue !== todayKey()) return false
+  const start = clockToMinutes(borrowInfo.startTime)
+  if (start == null) return false
+  return start < nowMinutes.value
+}
+
+function clearPastStart() {
+  refreshNow()
+  if (startIsPast()) borrowInfo.startTime = null
+}
+
+watch(
+  () => borrowInfo.dateValue,
+  () => {
+    clearPastStart()
+  }
+)
+
 let applying = false
 function applyRoom() {
-  if (borrowInfo.dateValue == '' || borrowInfo.startTime == '' || borrowInfo.endTime == '') {
+  if (!hasValue(borrowInfo.dateValue) || !hasValue(borrowInfo.startTime) || !hasValue(borrowInfo.endTime)) {
     errorAlert('请完善信息')
+    return
+  }
+  if (!isSelectableBorrowDate(borrowInfo.dateValue)) {
+    errorAlert('不能选择已经过去的日期')
+    return
+  }
+  clearPastStart()
+  if (startIsPast() || !hasValue(borrowInfo.startTime)) {
+    errorAlert('开始时间不能早于当前时间')
     return
   }
   if (applying) {
@@ -72,32 +180,35 @@ function applyRoom() {
     return
   }
   applying = true
-  http
-    .post('/ApplyRoomBorrow/', {
-      date: borrowInfo.dateValue,
-      start_time: borrowInfo.startTime,
-      end_time: borrowInfo.endTime,
-      people: userStore.department,
-      room_id: '302'
-    })
+  applyRoomBorrow({
+    borrow_date: borrowInfo.dateValue,
+    start_time: borrowInfo.startTime,
+    end_time: borrowInfo.endTime,
+    people: userStore.department,
+    room_id: ROOM_ID
+  })
     .then((res) => {
       applying = false
       if (res.data == 'success') {
         successAlert('借用成功')
+        chartRef.value?.GetNewData()
+        loadRoomBorrow()
       } else if (res.data == 'busy') {
-        errorAlert('借用失败')
+        errorAlert('该时间已被占用')
+      } else if (typeof res.data == 'string' && res.data) {
+        errorAlert(res.data)
       } else {
         errorAlert('未知错误')
       }
     })
-    .then(() => {
-      chartRef.value.GetNewData()
+    .catch(() => {
+      applying = false
+      errorAlert('借用失败')
     })
-    .catch(() => {})
 }
 
 onMounted(() => {
-  GetRoomBorrow()
+  loadRoomBorrow()
 })
 
 let borrowRecordDrawer = ref(false)
@@ -121,24 +232,26 @@ function openMyBorrowRecord() {
       style="max-width: 860px"
     >
       <el-form-item prop="dateValue" label="借用日期" class="form-item">
-        <el-select v-model="borrowInfo.dateValue" clearable placeholder="Select">
-          <el-option
-            v-for="item in dateRange"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-        </el-select>
+        <el-date-picker
+          v-model="borrowInfo.dateValue"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="选择借用日期"
+          :disabled-date="disableBorrowDate"
+          clearable
+        />
       </el-form-item>
       <el-form-item prop="startTime" label="借用开始时间" class="form-item">
         <el-time-select
           v-model="borrowInfo.startTime"
+          :min-time="startFloor"
           :max-time="borrowInfo.endTime"
           class="mr-4"
           placeholder="Start time"
           start="08:00"
           step="00:30"
           end="22:00"
+          @focus="clearPastStart"
         />
       </el-form-item>
       <el-form-item prop="endTime" label="借用结束时间" class="form-item">

@@ -1,5 +1,5 @@
 <script setup>
-import { http } from 'assets/js/http'
+import { modifySingleYoutholInfo, deleteYoutholer } from 'assets/js/oaApi.js'
 import { less768 } from 'assets/js/screen'
 import { reactive, onMounted, ref } from 'vue'
 import { errorAlert, successAlert, messageBox } from 'assets/js/message.js'
@@ -26,23 +26,22 @@ function modifyMemberInfo() {
     return
   }
 
-  http
-    .post('/ModifySingleYoutholInfo/', {
-      sdut_id: memberInfo.sdut_id,
-      department: memberInfo.department,
-      name: memberInfo.name,
-      identity: memberInfo.identity,
-      duty: memberInfo.duty
-    })
+  modifySingleYoutholInfo({
+    sdut_id: memberInfo.sdut_id,
+    department: memberInfo.department,
+    name: memberInfo.name,
+    identity: memberInfo.identity,
+    duty: memberInfo.duty
+  })
     .then((res) => {
-      console.log(res)
-      successAlert('修改成功')
+      const extra = res.data?.created ? `，新生成 ${res.data.created} 条值班` : ''
+      successAlert('修改成功' + extra)
       emit('displayMemberEdit', false)
       emit('getInfo')
     })
     .catch((err) => {
       console.log(err)
-      errorAlert('修改失败')
+      errorAlert(err.message || '修改失败')
     })
 }
 
@@ -53,8 +52,7 @@ let handleClose = (done) => {
 
 const handleDelete = () => {
   const success = () => {
-    http
-      .post('/DeletYoutholer/', {
+    deleteYoutholer({
         sdut_id: memberInfo.sdut_id,
         department: memberInfo.department
       })

@@ -1,4 +1,17 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { ensureSession, isAdminIdentity } from '../session.js'
+
+const adminRoutes = [
+  '/duty-status',
+  '/DutyRecord',
+  '/MemberManage',
+  '/MachineManage',
+  '/RoomManage',
+  '/leave-record',
+  '/schedule-query',
+  '/pause-duty',
+  '/room'
+]
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -39,6 +52,13 @@ const router = createRouter({
       }
     },
     {
+      path: '/duty-status',
+      name: 'oa-duty-status',
+      components: {
+        MainComponment: () => import('../views/DutyStatusQuery.vue')
+      }
+    },
+    {
       path: '/DutyRecord',
       name: 'oa-duty-record',
       components: {
@@ -67,6 +87,34 @@ const router = createRouter({
       }
     },
     {
+      path: '/leave-adjust',
+      name: 'oa-leave-adjust',
+      components: {
+        MainComponment: () => import('../views/LeaveAdjust.vue')
+      }
+    },
+    {
+      path: '/leave-record',
+      name: 'oa-leave-record',
+      components: {
+        MainComponment: () => import('../views/LeaveRecord.vue')
+      }
+    },
+    {
+      path: '/pause-duty',
+      name: 'oa-pause-duty',
+      components: {
+        MainComponment: () => import('../views/PauseDuty.vue')
+      }
+    },
+    {
+      path: '/schedule-query',
+      name: 'oa-schedule-query',
+      components: {
+        MainComponment: () => import('../views/ScheduleQuery.vue')
+      }
+    },
+    {
       path: '/test',
       name: 'oa-test',
       components: {
@@ -76,9 +124,22 @@ const router = createRouter({
   ]
 })
 
-// 路由守卫
-// router.beforeEach((to, from, next) => {
-//   const isAuthenticated = true // 替换为你的身份验证逻辑
+router.beforeEach(async (to) => {
+  let store
+  try {
+    store = await ensureSession()
+  } catch {
+    return true
+  }
+  const admin = isAdminIdentity(store.identity, store.position)
+  if (admin && to.path === '/') {
+    return { path: '/MemberManage', replace: true }
+  }
+  if (adminRoutes.includes(to.path) && !admin) {
+    return { path: '/duty', replace: true }
+  }
+  return true
+})
 
 //   if (to.matched.some((record) => record.meta.requiresAuth) && !isAuthenticated) {
 //     // 如果需要身份验证且用户未登录，则重定向到登录页

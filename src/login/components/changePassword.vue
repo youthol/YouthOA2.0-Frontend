@@ -3,6 +3,7 @@ import 'animate.css'
 import { successAlert, errorAlert } from 'assets/js/message.js'
 import { reactive, ref, onUnmounted } from 'vue'
 import { http } from 'assets/js/http.js' //配置了基本的设置
+import { getToken, clearToken } from 'assets/js/token.js'
 
 let formData = ref({
   origin_pwd: '',
@@ -43,7 +44,7 @@ function postChangePwd() {
       },
       {
         headers: {
-          Authorization: 'Bearer ' + localStorage.getItem('YoutholAccessToken')
+          Authorization: 'Bearer ' + getToken()
         }
       }
     )
@@ -95,7 +96,7 @@ onUnmounted(() => {
   if (is_changed == false) {
     // 现在假定这个页面只有第一次登陆的用户才会访问
     // 清除本地的 token ，强制修改密码
-    localStorage.removeItem('YoutholAccessToken')
+    clearToken()
   }
 })
 </script>

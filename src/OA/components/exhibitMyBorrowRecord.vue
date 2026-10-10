@@ -1,5 +1,5 @@
 <script setup>
-import { http } from 'assets/js/http'
+import { ROOM_ID, cancelRoomBorrow, getSingleBorrowRecord } from 'assets/js/oaApi.js'
 // import { less768 } from 'assets/js/screen'
 import { ref, reactive, onMounted } from 'vue'
 import { errorAlert, successAlert } from 'assets/js/message.js'
@@ -12,13 +12,12 @@ let tableData = reactive([])
 let _size = ref('70%')
 
 function getBorrowInfo() {
-  http
-    .post('/GetSingleBorrowRecord/', {
-      room_id: '302'
-    })
+  getSingleBorrowRecord({
+    room_id: ROOM_ID
+  })
     .then((res) => {
-      console.log(res)
       let data = res.data
+      if (!Array.isArray(data)) data = []
       tableData.length = 0
       for (let i = 0; i < data.length; i++) {
         let temp = {
@@ -35,6 +34,7 @@ function getBorrowInfo() {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('获取借用信息失败')
     })
 }
 
@@ -58,14 +58,13 @@ const cancelBorrow = (index, row) => {
   let _start_time = row.start_time
   let _room_id = row.room_id
   let _id = row.id
-  http
-    .post('/CancelRoomBorrow/', {
-      id: _id,
-      apply_time: _apply_time,
-      borrow_date: _borrow_date,
-      start_time: _start_time,
-      room_id: _room_id
-    })
+  cancelRoomBorrow({
+    id: _id,
+    apply_time: _apply_time,
+    borrow_date: _borrow_date,
+    start_time: _start_time,
+    room_id: _room_id
+  })
     .then((res) => {
       if (res.data == 'success') {
         successAlert('取消成功')
@@ -76,6 +75,7 @@ const cancelBorrow = (index, row) => {
     })
     .catch((err) => {
       console.log(err)
+      errorAlert('取消失败')
     })
 }
 </script>

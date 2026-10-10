@@ -1,44 +1,27 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { RouterView } from 'vue-router'
-import { http } from 'assets/js/http.js' //配置了基本的设置
 import { less768 } from 'assets/js/screen.js' //配置了基本的设置
 import { useUserStore } from 'store/store.js'
 import { errorAlert } from 'assets/js/message.js'
+import { getDutyPauseState, pausedFrom, checkDuty as fetchCheckDuty } from 'assets/js/oaApi.js'
+import { ensureSession } from './session.js'
 
+import { Expand, Fold } from '@element-plus/icons-vue'
 import navList from './components/navList.vue'
 
 let userStore = useUserStore()
 
-const verifySignIn = new Promise((resolve, reject) => {
-  http
-    .post('/GetYoutholerInfo/', {})
+function loadPauseState() {
+  getDutyPauseState()
     .then((res) => {
-      console.log(res)
-
-      // 在这里设置 Pinia状态？
-      userStore.$patch({
-        sdut_id: res.data.sdut_id,
-        is_login: true,
-        name: res.data.name,
-        department: res.data.department,
-        identity: res.data.identity,
-        position: res.data.position
-      })
-      // store.$patch({ sdut_id: res.data.sdut_id })
-      console.log('已登录')
-      resolve()
+      userStore.$patch({ duty_paused: pausedFrom(res) })
     })
-    .catch(function (error) {
-      console.log(error)
-      userStore.$patch({ sdut_id: 'no id', is_login: false })
-      reject()
-    })
-})
+    .catch(() => {})
+}
 
 function checkDuty() {
-  http
-    .post('/CheckDuty/', {
+  fetchCheckDuty({
       sdut_id: userStore.sdut_id
     })
     .then((res) => {
@@ -67,23 +50,23 @@ function displayHeaderNav(res) {
   drawer.value = res
 }
 
+
+const collapsed = ref(localStorage.getItem('oa-menu-collapse') === '1')
+const isPhone = ref(false)
+watch(collapsed, (value) => localStorage.setItem('oa-menu-collapse', value ? '1' : '0'))
+
 let _size = ref('0%')
 onMounted(() => {
-  if (less768()) {
+  isPhone.value = less768()
+  if (isPhone.value) {
     _size.value = '90%'
   }
-  if (userStore.is_login == true) {
-    //先检查 pinia
-    checkDuty()
-    return
-  }
-  verifySignIn
+  ensureSession()
     .then(() => {
+      loadPauseState()
       checkDuty()
     })
-    .catch(() => {
-      window.location.href = import.meta.env.BASE_URL
-    })
+    .catch(() => {})
 })
 </script>
 
@@ -103,15 +86,24 @@ onMounted(() => {
       </el-header>
 
       <el-container>
-        <el-aside class="aside-nav">
+        <el-aside class="aside-nav" :class="{ 'is-collapse': collapsed && !isPhone }">
           <div class="user-info">
             <!-- <el-image class="profile" :src="userInfo.profileSrc" fit="cover" /> -->
             <div class="user-info-detail">
               <div class="user-name">{{ userStore.name }}</div>
               <div class="department">{{ userStore.department }}</div>
+              <div class="department">{{ userStore.identity }}</div>
             </div>
           </div>
-          <navList> </navList>
+          <button v-if="!isPhone" type="button" class="collapse-btn" @click="collapsed = !collapsed">
+            <el-icon><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
+            <span class="collapse-label">{{ collapsed ? '展开' : '收起' }}</span>
+          </button>
+          <navList
+            :collapsed="collapsed"
+            :collapsible="!isPhone"
+            @expand="collapsed = false"
+          />
 
           <!-- <img src="../assets/img/youthol.png" alt="" class="youthol-logo" /> -->
         </el-aside>
@@ -138,7 +130,7 @@ onMounted(() => {
       <template #default>
         <div class="header-nav-drawer">
           <div class="nav-item" @click="displayHeaderNav(false)">关闭菜单</div>
-          <navList @display-header-nav="displayHeaderNav"> </navList>
+          <navList :collapsible="false" @display-header-nav="displayHeaderNav" />
         </div>
       </template>
     </el-drawer>
@@ -151,7 +143,15 @@ onMounted(() => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  margin: 20px 0;
+  width: 100%;
+  max-height: 220px;
+  margin: 12px 0;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    max-height 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.2s ease,
+    margin 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .user-info-detail {
   padding: 10px;
@@ -177,8 +177,9 @@ onMounted(() => {
   font-size: 18px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  overflow: hidden;
 }
 .header-nav {
   height: 50px;
@@ -244,6 +245,62 @@ onMounted(() => {
 
   .aside-nav {
     width: 200px;
+    transition: width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .aside-nav.is-collapse {
+    width: 64px;
+  }
+
+  .aside-nav.is-collapse .user-info {
+    max-height: 0;
+    margin: 0;
+    opacity: 0;
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    gap: 6px;
+    width: calc(100% - 24px);
+    height: 36px;
+    margin: 0 12px 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #008aff;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 40, 90, 0.18);
+    overflow: hidden;
+  }
+
+  .collapse-btn:hover {
+    background: #eaf5ff;
+  }
+
+  .collapse-label {
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 42px;
+    opacity: 1;
+    transition:
+      max-width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+      opacity 0.18s ease;
+  }
+
+  .aside-nav.is-collapse .collapse-btn {
+    gap: 0;
+  }
+
+  .aside-nav.is-collapse .collapse-label {
+    max-width: 0;
+    opacity: 0;
   }
 
   .nav-item {

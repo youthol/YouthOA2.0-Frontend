@@ -1,37 +1,33 @@
 <script setup>
-// import { storeToRef, defineStore } from 'pinia'
-// import { useUserStore } from '../store/user.js'
-// import { FormRules } from 'element-plus'
 import 'animate.css'
 
 import { ref, onMounted } from 'vue'
-import { http } from 'assets/js/http.js' //配置了基本的设置
+import { getYoutholerInfo } from 'assets/js/oaApi.js'
+import { getToken, clearToken } from 'assets/js/token.js'
+import { isAdminIdentity } from 'OA/session.js'
 
 import loginBox from './components/loginBox.vue'
 import changePassword from './components/changePassword.vue'
 
 let box_state = ref(true)
 
-function verifySignIn() {
-  if (!localStorage.getItem('YoutholAccessToken')) {
-    return Promise.resolve(false)
-  }
-
-  return http
-    .post('/GetUserInfo/', {})
-    .then(() => true)
-    .catch(() => false)
+function homeFor(info) {
+  const base = import.meta.env.BASE_URL || '/'
+  const admin = isAdminIdentity(info?.identity, info?.position)
+  return admin ? `${base}OA/#/MemberManage` : `${base}OA/#/duty`
 }
 
 function switchBox(res) {
   box_state.value = res
-  console.log(box_state.value)
 }
 
-// 生命周期
 onMounted(async () => {
-  if (await verifySignIn()) {
-    window.location.href = import.meta.env.BASE_URL
+  if (!getToken()) return
+  try {
+    const res = await getYoutholerInfo()
+    window.location.replace(homeFor(res.data))
+  } catch {
+    clearToken()
   }
 })
 </script>

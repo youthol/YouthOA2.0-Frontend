@@ -2,7 +2,9 @@
 import 'animate.css'
 import { successAlert, errorAlert } from 'assets/js/message.js'
 import { reactive, ref } from 'vue'
-import { http } from 'assets/js/http.js' //配置了基本的设置
+import { signIn as requestSignIn, getYoutholerInfo } from 'assets/js/oaApi.js'
+import { setToken } from 'assets/js/token.js'
+import { isAdminIdentity } from 'OA/session.js'
 
 const emit = defineEmits(['isLogin'])
 
@@ -39,25 +41,34 @@ function signIn() {
     errorAlert('请输入密码')
     return
   }
-  http
-    .post('/SignIn/', {
+  requestSignIn({
       username: formData.value.username,
       password: formData.value.password
     })
     .then((res) => {
       let data = res.data
       let token = data.access_token
+      if (!token) {
+        errorAlert('登录请求失败，请稍后重试')
+        return
+      }
 
       if (data.SignState == '初次登录') {
         errorAlert('首次登录，请修改密码')
-        localStorage.setItem('YoutholAccessToken', token)
+        setToken(token)
         emit('isLogin', false)
       } else if (data.SignState == '登录成功') {
-        successAlert('登录成功')
-        //存储 token
-        localStorage.setItem('YoutholAccessToken', token)
-        //跳转到首页
-        window.location.href = import.meta.env.BASE_URL
+        setToken(token)
+        getYoutholerInfo()
+          .then((infoRes) => {
+            successAlert('登录成功')
+            const base = import.meta.env.BASE_URL || '/'
+            const admin = isAdminIdentity(infoRes.data?.identity, infoRes.data?.position)
+            window.location.replace(admin ? `${base}OA/#/MemberManage` : `${base}OA/#/duty`)
+          })
+          .catch(() => {
+            errorAlert('登录状态无效，请重新登录')
+          })
       } else if (data.SignState == '账号或密码错误') {
         errorAlert('账号或密码错误')
       } else {
@@ -72,7 +83,7 @@ function signIn() {
 <template>
   <div class="login-box animate__animated animate__fadeIn">
     <img src="assets/img/youthol.png" alt="" class="youthol-logo" />
-    <el-form :model="formData" status-icon :rules="rules" class="form">
+    <el-form :model="formData" status-icon :rules="rules" class="form" @submit.prevent="signIn">
       <div class="username-box box-content">
         <el-form-item class="form-item" label="账号：" prop="username">
           <el-input
@@ -98,7 +109,7 @@ function signIn() {
         </el-form-item>
       </div>
     </el-form>
-    <el-button class="login-btn" type="primary" plain @click="signIn">登录</el-button>
+    <el-button class="login-btn" type="primary" plain native-type="button" @click="signIn">登录</el-button>
   </div>
 </template>
 

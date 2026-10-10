@@ -1,107 +1,157 @@
 <script setup>
-import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Calendar, Checked, EditPen, OfficeBuilding, SwitchButton, User } from '@element-plus/icons-vue'
 import { useUserStore } from 'store/store.js'
-const emit = defineEmits(['displayHeaderNav'])
-let userStore = useUserStore()
-function Logout() {
-  localStorage.removeItem('YoutholAccessToken')
+import { clearToken } from 'assets/js/token.js'
+import { isAdminIdentity, resetSession } from '../session.js'
+import { adminMenus, memberMenus, openedGroup } from './menuConfig.js'
+
+const emit = defineEmits(['displayHeaderNav', 'expand'])
+const props = defineProps({
+  collapsed: { type: Boolean, default: false },
+  collapsible: { type: Boolean, default: true }
+})
+
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
+const icons = { Calendar, Checked, EditPen, OfficeBuilding, SwitchButton, User }
+const isAdmin = computed(() => isAdminIdentity(userStore.identity))
+const menus = computed(() => (isAdmin.value ? adminMenus : memberMenus))
+const opened = computed(() => (isAdmin.value ? openedGroup(route.path) : []))
+const showCollapsed = computed(() => props.collapsible && props.collapsed)
+
+function onSelect(index) {
+  if (index.startsWith('/')) router.push(index)
+  emit('displayHeaderNav', false)
+}
+
+function onCollapsedClick(event) {
+  if (!showCollapsed.value) return
+  const target = event.target
+  if (!(target instanceof Element) || !target.closest('.el-sub-menu__title')) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('expand')
+}
+
+function logout() {
+  resetSession()
+  clearToken()
   userStore.$patch({ sdut_id: '', is_login: false })
   window.location.href = import.meta.env.BASE_URL
 }
-
-function close() {
-  emit('displayHeaderNav', false)
-}
 </script>
+
 <template>
-  <el-scrollbar>
-    <!-- <router-link to="/">
-              <div class="home nav-item">首页</div>
-            </router-link> -->
-
-    <router-link to="/duty">
-      <div class="duty nav-item" @click="close">值班</div>
-    </router-link>
-
-    <!-- <router-link to="/borrow">
-      <div class="borrow nav-item" @click="close">设备</div>
-    </router-link> -->
-
-    <!-- <router-link to="/study">
-      <div class="study nav-item" @click="close">培训</div>
-    </router-link> -->
-
-    <!-- <router-link to="/test">
-      <div class="test nav-item" @click="close">房间</div>
-    </router-link> -->
-
-    <router-link to="/room" v-if="userStore.position == '负责人' || userStore.identity == '管理员'">
-      <div class="room nav-item" @click="close">房间借用</div>
-    </router-link>
-
-    <router-link to="/DutyRecord" v-if="userStore.identity == '管理员'">
-      <div class="DutyRecord nav-item" @click="close">签到记录</div>
-    </router-link>
-
-    <router-link to="/RoomManage" v-if="userStore.identity == '管理员'">
-      <div class="MachineManage nav-item" @click="close">房间借用记录</div>
-    </router-link>
-
-    <router-link to="/MemberManage" v-if="userStore.identity == '管理员'">
-      <div class="MemberManage nav-item" @click="close">成员管理</div>
-    </router-link>
-    <!-- 
-    <router-link to="/MachineManage" v-if="userStore.identity == '管理员'">
-      <div class="MachineManage nav-item" @click="close">设备管理</div>
-    </router-link> -->
-
-    <div class="logout nav-item" @click="Logout">退出登录</div>
-  </el-scrollbar>
+  <div class="side-menu" :class="{ 'is-collapse': showCollapsed }" @click.capture="onCollapsedClick">
+    <el-menu
+      :key="opened.join()"
+      :default-active="route.path"
+      :default-openeds="opened"
+      :collapse="false"
+      :collapse-transition="false"
+      unique-opened
+      background-color="#008aff"
+      text-color="#ffffff"
+      active-text-color="#008aff"
+      @select="onSelect"
+    >
+      <template v-for="item in menus" :key="item.index">
+        <el-sub-menu v-if="item.children" :index="item.index">
+          <template #title>
+            <el-icon><component :is="icons[item.icon]" /></el-icon>
+            <span class="menu-label">{{ item.title }}</span>
+          </template>
+          <el-menu-item v-for="child in item.children" :key="child.index" :index="child.index">
+            <span class="menu-label">{{ child.title }}</span>
+          </el-menu-item>
+        </el-sub-menu>
+        <el-menu-item v-else :index="item.index">
+          <el-icon v-if="item.icon"><component :is="icons[item.icon]" /></el-icon>
+          <template #title><span class="menu-label">{{ item.title }}</span></template>
+        </el-menu-item>
+      </template>
+    </el-menu>
+    <button type="button" class="logout" @click="logout">
+      <el-icon><SwitchButton /></el-icon>
+      <span class="menu-label">退出登录</span>
+    </button>
+  </div>
 </template>
 
 <style scoped>
-@media only screen and (min-width: 768px) {
-  .nav-item {
-    margin: 3px 0;
-    width: 100%;
-    padding: 20px 0px;
-    color: white;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    transition:
-      transform 0.3s,
-      box-shadow 0.3s;
-  }
-
-  .nav-item:hover {
-    opacity: 1;
-    box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.7);
-    transform: scale(1.05, 1.05);
-  }
+.side-menu {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #008aff;
 }
-@media only screen and (max-width: 768px) {
-  .nav-item {
-    margin: 3px 0;
-    width: 100%;
-    padding: 20px 0px;
-    color: #008aff;
-    font-weight: 800;
-    font-size: 20px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: center;
-    transition:
-      transform 0.3s,
-      box-shadow 0.3s;
-  }
-
-  .nav-item:hover {
-    opacity: 1;
-    box-shadow: inset 0 0 20px #57b1ff6f;
-    transform: scale(1.05, 1.05);
-  }
+.el-menu {
+  border-right: none;
+  flex: 1;
+  overflow: auto;
+}
+.logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.menu-label {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 140px;
+  opacity: 1;
+  vertical-align: middle;
+  transition:
+    max-width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.18s ease;
+}
+.side-menu.is-collapse .menu-label {
+  max-width: 0;
+  opacity: 0;
+}
+.side-menu :deep(.el-menu--inline) {
+  max-height: 320px;
+  overflow: hidden;
+  transition: max-height 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.side-menu.is-collapse :deep(.el-menu--inline) {
+  max-height: 0;
+}
+.side-menu.is-collapse :deep(.el-sub-menu__icon-arrow) {
+  opacity: 0;
+}
+.side-menu.is-collapse :deep(.el-menu-item .el-icon),
+.side-menu.is-collapse :deep(.el-sub-menu__title .el-icon),
+.side-menu.is-collapse .logout .el-icon {
+  margin-right: 0;
+}
+.side-menu.is-collapse :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  background-color: #ffffff !important;
+  color: #008aff !important;
+}
+.side-menu :deep(.el-menu-item:hover),
+.side-menu :deep(.el-sub-menu__title:hover) {
+  background-color: #1a96ff !important;
+}
+.side-menu :deep(.el-menu-item.is-active) {
+  background-color: #ffffff !important;
+  color: #008aff !important;
 }
 </style>
