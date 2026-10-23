@@ -1,17 +1,20 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
-import { errorAlert, successAlert } from 'assets/js/message.js'
+import { errorAlert } from 'assets/js/message.js'
 import { formatScheduleLine as formatSlot } from 'assets/js/dutyFrame.js'
-import { getDutyStatusInRange, getDaySemesterDuty, getMemberSemesterDuty, getSemesterDutyRange, listFrom, objectFrom } from 'assets/js/oaApi.js'
+import { getDepartments, getDutyStatusInRange, getSemesterDutyRange, listFrom, objectFrom } from 'assets/js/oaApi.js'
 import { dutyStatusGroup, dutyStatusGroupText } from 'assets/js/dutyStatus.js'
 import dutyStatusDots from '../components/dutyStatusDots.vue'
 
 const personKeyword = ref('')
-const queryDate = ref('')
+const queryRange = ref([])
+const department = ref('')
+const departments = ref([])
+const departmentLoading = ref(false)
+const semesterRange = ref([])
 const resultRows = ref([])
 const resultState = ref('loading')
 const resultMessage = ref('')
-const emptyText = ref('暂无排班')
 const statusGroup = ref('all')
 const statusFilters = [
   { key: 'all', label: '全部' },
@@ -19,31 +22,47 @@ const statusFilters = [
   { key: 'missed', label: '未值班' },
   { key: 'irregular', label: '不规范' }
 ]
+const departmentOptions = computed(() => [...new Set([
+  ...departments.value,
+  ...resultRows.value.map((row) => row.department).filter(Boolean)
+])])
+const matchingRows = computed(() => {
+  const keyword = personKeyword.value.trim().toLowerCase()
+  const [start, end] = queryRange.value || []
+  return resultRows.value.filter((row) => {
+    const matchesPerson = !keyword || [row.name, row.sdut_id].some((value) =>
+      String(value ?? '').toLowerCase().includes(keyword)
+    )
+    return matchesPerson &&
+      (!department.value || row.department === department.value) &&
+      (!start || row.date >= start) && (!end || row.date <= end)
+  })
+})
 const groupCounts = computed(() => {
   const counts = { done: 0, missed: 0, irregular: 0, pending: 0 }
-  resultRows.value.forEach((row) => {
+  matchingRows.value.forEach((row) => {
     const group = dutyStatusGroup(row)
     counts[group] = (counts[group] || 0) + 1
   })
   return counts
 })
 const filteredRows = computed(() => {
-  if (statusGroup.value === 'all') return resultRows.value
-  return resultRows.value.filter((row) => dutyStatusGroup(row) === statusGroup.value)
+  if (statusGroup.value === 'all') return matchingRows.value
+  return matchingRows.value.filter((row) => dutyStatusGroup(row) === statusGroup.value)
 })
 const tableEmptyText = computed(() => {
   if (resultState.value === 'loading') return '查询中'
-  if (statusGroup.value !== 'all' && resultRows.value.length && !filteredRows.value.length) return '没有符合该状态的记录'
-  return emptyText.value
+  if (resultState.value === 'fail') return resultMessage.value
+  if (statusGroup.value !== 'all' && matchingRows.value.length && !filteredRows.value.length) return '没有符合该状态的记录'
+  return '没有符合当前筛选条件的排班'
 })
 let resultToken = 0
 
-function beginResult(kind) {
+function beginResult() {
   resultToken += 1
   resultRows.value = []
   resultState.value = 'loading'
   resultMessage.value = ''
-  emptyText.value = kind === 'person' ? '输入姓名或学号后查询' : kind === 'day' ? '选择日期后查询当天值班' : '暂无排班'
   return resultToken
 }
 
@@ -51,12 +70,11 @@ function isCurrent(token) {
   return token === resultToken
 }
 
-function memberErrorText(err) {
+function queryErrorText(err) {
   const code = err?.response?.data?.error
-  if (code === 'MEMBER_NOT_FOUND') return '成员不存在'
   if (code === 'SEMESTER_NOT_CONFIGURED') return '当前学期未配置'
   if (code === 'FORBIDDEN') return '没有权限'
-  return err?.message || '按人查询失败'
+  return err?.message || '查询排班失败'
 }
 
 function queryPerson() {
@@ -65,104 +83,67 @@ function queryPerson() {
     errorAlert('请输入姓名或学号')
     return
   }
-  const token = beginResult('person')
-  getMemberSemesterDuty({ keyword })
-    .then((res) => {
-      if (!isCurrent(token)) return
-      const list = listFrom(res)
-      resultRows.value = list
-      resultState.value = list.length ? 'ok' : 'empty'
-      resultMessage.value = list.length ? '' : '该成员本学期没有有效排班'
-      if (list.length) successAlert(`共找到 ${list.length} 条有效排班`)
-    })
-    .catch((err) => {
-      if (!isCurrent(token)) return
-      resultRows.value = []
-      resultState.value = 'fail'
-      resultMessage.value = '按人查询失败，请稍后重试'
-      errorAlert(memberErrorText(err))
-    })
+  return querySchedule()
 }
 
-function loadSemesterSchedule() {
-  const token = beginResult('semester')
-  getSemesterDutyRange()
-    .then((semester) => {
-      if (!isCurrent(token)) return null
-      const semesterInfo = objectFrom(semester)
-      const start = semesterInfo.semester_start || semesterInfo.default_start || semesterInfo.start_date
-      const end = semesterInfo.duty_end || semesterInfo.default_end || semesterInfo.end_date
+async function querySchedule() {
+  const selectedRange = [...(queryRange.value || [])]
+  if (selectedRange.length && (selectedRange.length !== 2 || !selectedRange[0] || !selectedRange[1] || selectedRange[0] > selectedRange[1])) {
+    errorAlert('请选择有效的日期区间')
+    return
+  }
+  const token = beginResult()
+  try {
+    if (!selectedRange.length && !semesterRange.value.length) {
+      const semester = await getSemesterDutyRange()
+      if (!isCurrent(token)) return
+      const info = objectFrom(semester)
+      const start = info.semester_start || info.default_start || info.start_date
+      const end = info.duty_end || info.default_end || info.end_date
       if (!start || !end) {
-        resultRows.value = []
         resultState.value = 'empty'
         resultMessage.value = '当前学期暂无排班'
-        return null
+        return
       }
-      return getDutyStatusInRange({ start_date: `${start} 00:00:00`, end_date: `${end} 23:59:59` })
-    })
-    .then((res) => {
-      if (!res || !isCurrent(token)) return
-      const list = listFrom(res).sort(
-        (a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time) || String(a.sdut_id).localeCompare(String(b.sdut_id))
-      )
-      resultRows.value = list
-      resultState.value = list.length ? 'ok' : 'empty'
-      resultMessage.value = list.length ? '' : '当前学期暂无排班'
-    })
-    .catch((err) => {
-      if (!isCurrent(token)) return
-      resultState.value = 'fail'
-      resultMessage.value = '查询失败，请稍后重试'
-      errorAlert(err.message || '查询排班失败')
-    })
-}
-
-function rowsFromDay(res, fallbackDate) {
-  const info = objectFrom(res)
-  const date = info.date || fallbackDate || ''
-  return listFrom(res).map((row) => ({
-    ...row,
-    date: row.date || date
-  }))
-}
-
-function loadDayRows() {
-  if (!queryDate.value) {
-    errorAlert('请选择日期')
-    return Promise.resolve(null)
-  }
-  const token = beginResult('day')
-  return getDaySemesterDuty({ date: queryDate.value })
-    .then((res) => {
-      const list = rowsFromDay(res, queryDate.value)
-      if (!isCurrent(token)) return null
-      resultRows.value = list
-      resultState.value = list.length ? 'ok' : 'empty'
-      resultMessage.value = list.length ? '' : '当天没有值班人员'
-      return list
-    })
-    .catch((err) => {
-      if (!isCurrent(token)) return null
-      resultRows.value = []
-      resultState.value = 'fail'
-      resultMessage.value = '按日查询失败，请稍后重试'
-      errorAlert(err.message || '按日查询失败')
-      return null
-    })
-}
-
-function queryDay() {
-  loadDayRows().then((rows) => {
-    if (!rows) return
-    if (!rows.length) {
-      errorAlert('当天没有值班人员')
-      return
+      semesterRange.value = [start, end]
     }
-    successAlert(`当天共 ${rows.length} 人值班`)
-  })
+    const [start, end] = selectedRange.length ? selectedRange : semesterRange.value
+    const res = await getDutyStatusInRange({
+      start_date: `${start} 00:00:00`,
+      end_date: `${end} 23:59:59`
+    })
+    if (!isCurrent(token)) return
+    resultRows.value = listFrom(res).sort(
+      (first, second) => (first.date + first.start_time).localeCompare(second.date + second.start_time) || String(first.sdut_id).localeCompare(String(second.sdut_id))
+    )
+    resultState.value = resultRows.value.length ? 'ok' : 'empty'
+    resultMessage.value = resultRows.value.length ? '' : '没有符合当前筛选条件的排班'
+  } catch (err) {
+    if (!isCurrent(token)) return
+    resultState.value = 'fail'
+    resultMessage.value = '查询失败，请稍后重试'
+    errorAlert(queryErrorText(err))
+  }
 }
 
-onMounted(loadSemesterSchedule)
+async function loadDepartments() {
+  departmentLoading.value = true
+  try {
+    const res = await getDepartments()
+    departments.value = listFrom(res)
+      .map((item) => typeof item === 'string' ? item : item?.name)
+      .filter(Boolean)
+  } catch (err) {
+    errorAlert(err.message || '加载部门失败，请刷新重试')
+  } finally {
+    departmentLoading.value = false
+  }
+}
+
+onMounted(() => {
+  querySchedule()
+  loadDepartments()
+})
 </script>
 
 <template>
@@ -170,10 +151,14 @@ onMounted(loadSemesterSchedule)
     <h2 class="title">排班查询</h2>
     <div class="toolbar query-bar">
       <el-input v-model="personKeyword" placeholder="按人查询：姓名或学号" clearable @keyup.enter="queryPerson" />
-      <div class="btn" @click="queryPerson">按人查询</div>
-      <el-date-picker v-model="queryDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" />
-      <div class="btn" @click="queryDay">查看名单</div>
+      <button type="button" class="btn" @click="queryPerson">按人查询</button>
+      <el-select v-model="department" class="department-select" placeholder="按部门查询：全部部门" aria-label="按部门查询" filterable clearable :loading="departmentLoading">
+        <el-option v-for="name in departmentOptions" :key="name" :label="name" :value="name" />
+      </el-select>
+      <el-date-picker v-model="queryRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" @change="querySchedule" />
+      <button type="button" class="btn" @click="querySchedule">查看名单</button>
     </div>
+    <p class="hint">姓名或学号、部门、日期区间可组合筛选；不选日期时显示当前学期，区间包含起止日期。</p>
     <div class="status-bar">
       <span class="status-label">值班状态</span>
       <div
@@ -228,7 +213,15 @@ onMounted(loadSemesterSchedule)
   width: 220px;
 }
 .query-bar {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+}
+.department-select {
+  width: 220px;
+}
+.toolbar :deep(.el-date-editor) {
+  flex: 0 1 320px;
+  width: 320px;
+  max-width: 100%;
 }
 .table {
   width: 100%;
@@ -240,6 +233,8 @@ onMounted(loadSemesterSchedule)
   color: #008aff;
   background: #fff;
   font-weight: 700;
+  font-size: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 .btn:hover {
@@ -286,6 +281,13 @@ onMounted(loadSemesterSchedule)
     flex-direction: column;
   }
   .toolbar :deep(.el-input) {
+    width: 100%;
+  }
+  .department-select {
+    width: 100%;
+  }
+  .toolbar :deep(.el-date-editor) {
+    flex: none;
     width: 100%;
   }
   .query-bar {
